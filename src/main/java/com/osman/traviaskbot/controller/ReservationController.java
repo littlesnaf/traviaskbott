@@ -2,6 +2,8 @@
 package com.osman.traviaskbot.controller;
 
 import com.osman.traviaskbot.dto.ReservationDto;
+import com.osman.traviaskbot.entity.Reservation;
+import com.osman.traviaskbot.entity.Route;
 import com.osman.traviaskbot.service.ReservationProcessor;
 import com.osman.traviaskbot.repository.ReservationRepository;
 import lombok.RequiredArgsConstructor;
@@ -13,6 +15,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import org.springframework.ui.Model;
+
 
 @RestController
 @RequestMapping("/api/reservations")
@@ -43,12 +47,30 @@ public class ReservationController {
                 ));
     }
 
+    @GetMapping("/vrp-results")
+    public String showVrpResults(Model model) {
+        // VRP işlemi sonucu dönen rotalar
+        List<Route> routes = processor.getVrpResults(); // VRP sonucu döndürülecek veriyi burada alıyoruz.
+        model.addAttribute("routes", routes);
+        return "vrp-results";  // Bu, vrp-results.html şablonunu kullanacak.
+    }
+
+    @PostMapping("/reservations/update")
+    public String updateReservation(@ModelAttribute Reservation reservation) {
+        // Geçerli rezervasyonu güncelle
+        reservationRepo.save(reservation);  // JPA repository kullanarak rezervasyonu kaydediyoruz.
+        return "redirect:/reservations";  // Rezervasyonlar sayfasına yönlendir.
+    }
+
+
+
     // manuel tetikleme için artık GET de kullanabilirsiniz
     @GetMapping("/trigger")
-    public Map<String,String> triggerGet() {
-        processor.processReservations();
-        return Map.of("status","started");
+    public Map<String, String> triggerGet() {
+        processor.processReservations(); // sadece yeni rezervasyonları ekle
+        return Map.of("status", "started");
     }
+
     // (isteğe bağlı: orijinal POST method’u da kalsın)
     @PostMapping("/trigger")
     public Map<String,String> triggerPost() {
