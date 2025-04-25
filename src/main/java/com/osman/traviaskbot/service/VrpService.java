@@ -1,5 +1,8 @@
 // src/main/java/com/osman/traviaskbot/service/VrpService.java
 package com.osman.traviaskbot.service;
+
+import com.google.protobuf.Descriptors.Descriptor;
+
 import com.google.ortools.Loader;
 import com.google.ortools.constraintsolver.Assignment;
 import com.google.ortools.constraintsolver.FirstSolutionStrategy;
@@ -10,8 +13,12 @@ import com.google.ortools.constraintsolver.RoutingIndexManager;
 import com.google.ortools.constraintsolver.RoutingModel;
 import com.google.ortools.constraintsolver.RoutingSearchParameters;
 import com.google.ortools.constraintsolver.RoutingSearchParameters.LocalSearchNeighborhoodOperators;
-import com.google.ortools.util.OptionalBoolean;
+                     // ← defaultRoutingSearchParameters()
+import com.google.ortools.util.OptionalBoolean;                     // ← proto enu
+import com.google.ortools.constraintsolver.RoutingSearchParameters.LocalSearchNeighborhoodOperators;
+import com.google.protobuf.Descriptors;
 import com.google.protobuf.Duration;
+import com.google.ortools.util.OptionalBoolean;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -39,18 +46,18 @@ public class VrpService {
 
         // 2) Başlangıç/bitiş indeksleri
         int[] starts = IntStream.range(0, D).toArray();
-        int[] ends = IntStream.generate(() -> nodeCount - 1)
+        int[] ends   = IntStream.generate(() -> nodeCount - 1)
                 .limit(vehicleCount)
                 .toArray();
 
         // 3) Manager & Model
-        RoutingIndexManager mgr = new RoutingIndexManager(nodeCount, vehicleCount, starts, ends);
-        RoutingModel routing = new RoutingModel(mgr);
+        RoutingIndexManager mgr     = new RoutingIndexManager(nodeCount, vehicleCount, starts, ends);
+        RoutingModel        routing = new RoutingModel(mgr);
 
         // 4) Koordinatlar ve mesafe matrisi
         double[][] nodes = new double[nodeCount][2];
-        for (int i = 0; i < D; i++) nodes[i] = driverStarts.get(i);
-        for (int i = 0; i < N; i++) nodes[D + i] = pickups.get(i);
+        for (int i = 0; i < D; i++)      nodes[i]     = driverStarts.get(i);
+        for (int i = 0; i < N; i++)      nodes[D + i] = pickups.get(i);
         nodes[nodeCount - 1] = new double[]{36.876074, 31.086317};  // depo
 
         long[][] dist = new long[nodeCount][nodeCount];
@@ -98,6 +105,7 @@ public class VrpService {
             routing.addDisjunction(new long[]{startIdx}, vehicleUnusedPenalty);
         }
 
+        // … önceki kod …
 
 // 10) Search parameters oluştur (varsayılanı alıp sadece 3 operatörü değiştiriyoruz)
         // --------------------------------------------------------------------------------
@@ -129,6 +137,11 @@ public class VrpService {
         // 11) Çözümü çalıştır
         Assignment sol = routing.solveWithParameters(params);
 
+// … sonraki kod …
+
+
+
+
         if (sol == null) {
             log.warn("❌ VRP çözüm bulunamadı");
             return Collections.emptyMap();
@@ -149,16 +162,14 @@ public class VrpService {
         return result;
     }
 
-    /**
-     * Haversine (km)
-     */
+    /** Haversine (km) */
     private static double haversine(double[] a, double[] b) {
-        double R = 6371;
+        double R    = 6371;
         double dLat = Math.toRadians(b[0] - a[0]);
         double dLng = Math.toRadians(b[1] - a[1]);
-        double s = Math.sin(dLat / 2) * Math.sin(dLat / 2)
-                + Math.cos(Math.toRadians(a[0])) * Math.cos(Math.toRadians(b[0]))
-                * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+        double s = Math.sin(dLat/2)*Math.sin(dLat/2)
+                + Math.cos(Math.toRadians(a[0]))*Math.cos(Math.toRadians(b[0]))
+                * Math.sin(dLng/2)*Math.sin(dLng/2);
         return 2 * R * Math.asin(Math.sqrt(s));
     }
 }
