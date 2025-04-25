@@ -218,11 +218,26 @@ public class ReservationProcessor {
                     existing.setTime    ((LocalTime)d.get("time"));
                     existing.setAdults  ((Integer)d.get("adults"));
                     existing.setChildren((Integer)d.get("children"));
-                    existing.setPickup  ((String)d.get("pickup"));
-                    existing.setDistrict((String)d.get("district"));
+
+                    String pickup = (String)d.get("pickup");
+                    if (pickup != null && !pickup.isBlank()) {
+                        existing.setPickup(pickup);
+                        existing.setDistrict(districtExtractor.extract(pickup));
+                    }
+
+                    String customer = (String)d.get("customer");
+                    if (customer != null && !customer.isBlank()) {
+                        existing.setCustomer(customer);
+                    }
+                    String phone = (String)d.get("phone");
+                    if (phone != null && !phone.isBlank()) {
+                        existing.setPhone(phone);
+                    }
+
                     existing.setStatus  ("changed");
                     reservationRepo.save(existing);
                 }, () -> saveReservation(d));
+        // değişiklik mailini ayrı tabloya logla
         changedRepo.save(new ChangedMail(null, rawBody, Instant.now()));
     }
 
