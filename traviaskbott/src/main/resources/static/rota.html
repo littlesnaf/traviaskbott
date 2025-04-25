@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Driver Rota Linkleri</title>
+</head>
+<body>
+<h1>Driver Rota Linkleri</h1>
+<ul id="links"></ul>
+
+<script>
+    // Tarih filtresini ihtiyacınıza göre değiştirin
+    fetch('/api/routes/mapsUrls?after=2025-04-01')
+        .then(r => r.json())
+        .then(data => {
+            const ul = document.getElementById('links');
+            Object.entries(data).forEach(([driver, url]) => {
+                const li = document.createElement('li');
+                const a  = document.createElement('a');
+                a.href        = url;
+                a.textContent = driver;
+                a.target      = '_blank';
+                li.appendChild(a);
+                ul.appendChild(li);
+            });
+        })
+        .catch(console.error);
+</script>
+</body>
+</html>
