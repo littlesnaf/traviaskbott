@@ -60,7 +60,7 @@ public class RouteController {
                 throw new RuntimeException("Driver address geocode failed", ex);
             }
         }
-        int driverCount = driverStarts.size();
+        int hubCount = driverStarts.size();
 
         /* --- (b) rezervasyonları çek --- */
         List<ReservationDto> allDtos = processor.fetchDtos(after);
@@ -84,11 +84,17 @@ public class RouteController {
         /* --- (d) kapasiteye göre araç sayısı --- */
         int totalPax     = paxList.stream().mapToInt(Integer::intValue).sum();
         int minVehicles = Math.max(4, (int) Math.ceil((double) totalPax / MAX_PAX));
-        int vehicleUsed  = Math.min(driverCount, Math.max(minVehicles, 1));
+        int vehicleUsed  = Math.max(minVehicles, 1);
+        /* --- (e) aynı hub’dan tekrar tekrar araç çıkartabilmek için starts listesini doldur --- */
+        List<double[]> effectiveStarts = new ArrayList<>(vehicleUsed);
+        for (int i = 0; i < vehicleUsed; i++) {
+            // mod ile hubCount’a döndür, böylece 0’dan hubCount-1’e kadar sürekli döner
+            effectiveStarts.add(driverStarts.get(i % hubCount));
+        }
 
-        /* --- (e) VRP çöz --- */
+        /* --- (f) VRP çöz --- */
         Map<Integer,List<Integer>> sol = vrpService.solveVrp(
-                driverStarts.subList(0, vehicleUsed),
+                effectiveStarts,
                 pickupCoords,
                 paxList,
                 vehicleUsed);
@@ -110,17 +116,29 @@ public class RouteController {
        2) Google-Maps link’leri
        ====================================================== */
     @GetMapping("/optimized/mapsUrls")
-    public Map<String,String> optimizedMaps(
+    public Map<String, Map<String, String>> optimizedMaps(
             @RequestParam(defaultValue = "1970-01-01")
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate after) {
 
-        Map<String,List<String>> routeMap = optimizedRoutes(after);
-        Map<String,String> urls = new LinkedHashMap<>();
+        Map<String, List<String>> routeMap = optimizedRoutes(after);
+        Map<String, Map<String, String>> urls = new LinkedHashMap<>();
 
-        routeMap.forEach((drv,picks) -> {
-            String origin = DRIVER_ADDRS.get(Integer.parseInt(drv.replace("driver",""))-1);
-            urls.put(drv, buildMapsUrl(origin, LAND_OF_LEGENDS, picks));
+        routeMap.forEach((drv, picks) -> {
+            // Orijinal (gidiş) URL
+            String origin = DRIVER_ADDRS.get(Integer.parseInt(drv.replace("driver","")) - 1);
+            String goUrl = buildMapsUrl(origin, LAND_OF_LEGENDS, picks);
+
+            // Dönüş için: waypoint’leri ters sırada kullanıp ters rota kuruyoruz
+            List<String> returnWaypoints = new ArrayList<>(picks);
+            Collections.reverse(returnWaypoints);
+            String returnUrl = buildMapsUrl(LAND_OF_LEGENDS, origin, returnWaypoints);
+
+            urls.put(drv, Map.of(
+                    "go",    goUrl,
+                    "return", returnUrl
+            ));
         });
+
         return urls;
     }
 
