@@ -33,12 +33,15 @@ public class ReservationController {
 
 
     @GetMapping("/vrp-results")
-    public String showVrpResults(Model model) {
-        // VRP işlemi sonucu dönen rotalar
-        List<Route> routes = processor.getVrpResults(); // VRP sonucu döndürülecek veriyi burada alıyoruz.
-        model.addAttribute("routes", routes);
-        return "vrp-results";  // Bu, vrp-results.html şablonunu kullanacak.
-    }
+public String showVrpResults(
+@RequestParam(defaultValue = "1970-01-01")
+@DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate after,
+Model model
+) {
+List<Route> routes = processor.getVrpResults(after);
+model.addAttribute("routes", routes);
+return "vrp-results";
+ }
 
     @PostMapping("/reservations/update")
     public String updateReservation(@ModelAttribute Reservation reservation) {

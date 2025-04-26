@@ -7,6 +7,7 @@ import com.osman.traviaskbot.entity.UnparsedMail;
 import com.osman.traviaskbot.repository.ReservationRepository;
 import com.osman.traviaskbot.repository.UnparsedMailRepository;
 import com.osman.traviaskbot.util.DistrictExtractor;
+import com.osman.traviaskbot.controller.RouteController;
 import jakarta.mail.*;
 import jakarta.mail.internet.MimeMultipart;
 import jakarta.mail.search.FlagTerm;
@@ -46,6 +47,8 @@ public class ReservationProcessor {
     private final ReservationRepository reservationRepo;
     private final UnparsedMailRepository unparsedRepo;
     private final DistrictExtractor districtExtractor;
+    private final RouteService routeService;
+    private final VrpService vrpService;
     private List<Route> vrpResults;
 
     @Value("${gmail.user}")
@@ -95,34 +98,56 @@ public class ReservationProcessor {
                 .collect(Collectors.toList());
     }
 
-    /* ════════════════════════════════════════════════════════════════════════════════
-       VRP işlemleri ve sonuçları
-       ════════════════════════════════════════════════════════════════════════════════ */
-    public void processVrp() {
-        log.info("🔄 VRP işlemi başlatıldı.");
+    public List<Route> getVrpResults(LocalDate after) {
+        // (a) Onaylı, pickup’u dolu DTO’ları çek
+        List<ReservationDto> dtos = fetchDtos(after);
 
-        // VRP hesaplama metodu. Bu örnek bir algoritmadır.
-        vrpResults = someVrpAlgorithm(); // VRP hesaplama işlemi
+        // (b) Sürücü adreslerini olduğu gibi al (distinct yok)
+        List<String> driverAddrs = RouteController.DRIVER_ADDRS;
+        List<double[]> driverStarts = new ArrayList<>();
+        for (String addr : driverAddrs) {
+            try {
+                driverStarts.add(routeService.toLatLng(addr));
+            } catch (Exception e) {
+                log.error("Driver geocode failed: {}", addr, e);
+                // istersen continue ile atlayabilir veya patlatabilirsin
+            }
+        }
 
-        log.info("🔄 VRP işlemi tamamlandı.");
-    }
+        // (c) Rezervasyon pickup’larını geocode et
+        List<double[]> pickups = new ArrayList<>();
+        List<Integer> paxList  = new ArrayList<>();
+        for (ReservationDto d : dtos) {
+            try {
+                pickups.add(routeService.toLatLng(d.getPickup()));
+                paxList.add(d.getAdults() + d.getChildren());
+            } catch (Exception ex) {
+                log.warn("Pickup geocode başarısız, atlanıyor: {}", d.getPickup());
+            }
+        }
+        if (pickups.isEmpty()) {
+            return Collections.emptyList();
+        }
 
-    public List<Route> getVrpResults() {
-        return vrpResults;
-    }
+        // (d) VRP servisini çağır
+        Map<Integer,List<Integer>> solution = vrpService.solveVrp(
+                driverStarts,
+                pickups,
+                paxList,
+                driverStarts.size()    // araç sayısı da driverStarts’ın uzunluğu kadar
+        );
 
-    /**
-     * VRP hesaplama için basit bir örnek algoritma.
-     * Gerçek VRP algoritmanız burada olacak.
-     * @return Hesaplanmış rota listesi
-     */
-    private List<Route> someVrpAlgorithm() {
-        // Örnek VRP sonuçları
+        // (e) Çıkan indeksi Route objesine dönüştür
         List<Route> routes = new ArrayList<>();
-        routes.add(new Route("Route 1", 15.5)); // Örnek rota
-        routes.add(new Route("Route 2", 20.0)); // Örnek rota
+        solution.forEach((veh, nodes) -> {
+            double dist = nodes.size() * 1.0;
+            routes.add(new Route("driver" + (veh + 1), dist));
+        });
         return routes;
     }
+
+
+
 
     /* ════════════════════════════════════════════════════════════════════════════════
        --------------  A Ş A Ğ I S I   P R İ V A T E   Y A R D I M C I L A R  --------------
@@ -253,6 +278,11 @@ public class ReservationProcessor {
 
     /** DB’ye kaydet */
     private void saveReservation(Map<String, Object> d) {
+        String ref = (String) d.get("reference");
+        if (reservationRepo.existsByReference(ref)) {
+            log.warn("❗ Aynı referans zaten var, atlanıyor: {}", ref);
+            return;
+        }
 
         Reservation res = new Reservation();
         res.setReference((String) d.get("reference"));

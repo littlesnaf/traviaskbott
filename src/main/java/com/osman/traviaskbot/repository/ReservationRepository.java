@@ -7,8 +7,8 @@
     import java.time.LocalDate;
     import java.util.List;
 
-    public interface ReservationRepository
-            extends JpaRepository<Reservation, Long> {
+    public interface ReservationRepository extends JpaRepository<Reservation, Long> {
+        boolean existsByReference(String reference);
 
         List<Reservation> findByDateGreaterThanEqualOrderByDateAscTimeAsc(LocalDate after);
 
