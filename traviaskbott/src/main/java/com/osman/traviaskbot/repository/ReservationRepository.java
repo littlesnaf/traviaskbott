@@ -11,4 +11,8 @@
             extends JpaRepository<Reservation, Long> {
 
         List<Reservation> findByDateGreaterThanEqualOrderByDateAscTimeAsc(LocalDate after);
+
+        List<Reservation> findByStatusOrderByDateAscTimeAsc(String status);
+        List<Reservation> findByStatusOrderByDateAsc(String status);
+
     }

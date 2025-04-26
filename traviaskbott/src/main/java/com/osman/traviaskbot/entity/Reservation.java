@@ -4,6 +4,7 @@ package com.osman.traviaskbot.entity;
 import jakarta.persistence.*;
 import lombok.Data;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
 
@@ -32,4 +33,10 @@ public class Reservation {
     @Column(length = 2000)
     private String pickup;
     private String district;
+
+    @Column(name = "cancelled_at")
+    private Instant cancelledAt;
+
+    @Column(name = "cancelled_by")
+    private String cancelledBy;
 }
