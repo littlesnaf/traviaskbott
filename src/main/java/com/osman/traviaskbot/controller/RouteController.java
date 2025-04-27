@@ -1,4 +1,3 @@
-// src/main/java/com/osman/traviaskbot/controller/RouteController.java
 package com.osman.traviaskbot.controller;
 
 import com.google.maps.model.DirectionsResult;
@@ -25,6 +24,7 @@ import java.util.function.Function;
 @Slf4j
 public class RouteController {
 
+    /* ───────────── Sabitler ───────────── */
     public static final List<String> DRIVER_ADDRS = List.of(
             "Mahmutlar, Sarıhasanlı Cd. no:86, 07450 Alanya/Antalya, Türkiye",
             "Mahmutlar, Sarıhasanlı Cd. no:86, 07450 Alanya/Antalya, Türkiye",
@@ -38,17 +38,24 @@ public class RouteController {
     private static final String LAND_OF_LEGENDS = "36.876074,31.086317";
     private static final int    MAX_PAX         = 16;
 
+    /* ───────────── Bağımlılıklar ───────────── */
     private final ReservationProcessor processor;
     private final RouteService         routeService;
     private final VrpService           vrpService;
 
-    /** 1) → pickup listeleri */
+    /* optimizedRoutes() çağrısında oluşturulan başlangıç listesi
+       – maps & schedules uç noktaları burada kullanacak */
+    private List<double[]> lastStarts = Collections.emptyList();
+
+    /* ═════════════════════════════════════════════════════════════
+       1)  → Şoför-pickup eşlemesi
+       ═════════════════════════════════════════════════════════════ */
     @GetMapping("/optimized")
     public Map<String, List<String>> optimizedRoutes(
             @RequestParam(defaultValue = "1970-01-01")
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate after) {
 
-        // (a) şoför hub’ları geocode
+        /* (a) Hub koordinatları */
         List<double[]> driverStarts = new ArrayList<>();
         for (String addr : DRIVER_ADDRS) {
             try {
@@ -60,10 +67,10 @@ public class RouteController {
         }
         int hubCount = driverStarts.size();
 
-        // (b) rezervasyonlar
+        /* (b) Rezervasyon DTO’ları */
         List<ReservationDto> all = processor.fetchDtos(after);
 
-        // (c) geocode başarılı pickup’lar
+        /* (c) Geocode edilmiş pickup’lar */
         List<double[]> pickupCoords = new ArrayList<>();
         List<ReservationDto> good   = new ArrayList<>();
         List<Integer> paxList       = new ArrayList<>();
@@ -78,38 +85,39 @@ public class RouteController {
         }
         if (pickupCoords.isEmpty()) return Collections.emptyMap();
 
-        // (d) araç sayısı
-        int totalPax    = paxList.stream().mapToInt(x -> x).sum();
-        int minVeh      = Math.max(4, (int)Math.ceil((double)totalPax / MAX_PAX));
+        /* (d) Araç sayısı ve start listesi */
+        int totalPax    = paxList.stream().mapToInt(Integer::intValue).sum();
+        int minVeh      = Math.max(4, (int) Math.ceil((double) totalPax / MAX_PAX));
         int vehicleUsed = Math.max(minVeh, 1);
 
-        // (e) aynı hub’dan tekrar araç
-        List<double[]> starts = new ArrayList<>();
-        for (int i = 0; i < vehicleUsed; i++) {
+        List<double[]> starts = new ArrayList<>(driverStarts);          // önce tüm hub’lar
+        for (int i = 0; i < vehicleUsed - hubCount; i++)                // gerekirse kopyala
             starts.add(driverStarts.get(i % hubCount));
-        }
 
-        // (f) VRP çöz
+        /* (e) VRP çöz – solveVrp lastStarts içine kopyalar */
         Map<Integer,List<Integer>> sol = vrpService.solveVrp(
-                starts, pickupCoords, paxList, vehicleUsed
+                starts, pickupCoords, paxList, starts.size()
         );
+        this.lastStarts = new ArrayList<>(starts);   // maps & schedules için sakla
 
-        // (g) index→adres
-        int offset = vehicleUsed;
+        /* (f) Node → pickup metni */
+        int offset = starts.size();
         Map<String,List<String>> result = new LinkedHashMap<>();
         sol.forEach((v, nodes) -> {
             List<String> picks = new ArrayList<>();
             for (int idx : nodes) {
-                if (idx>=offset && idx<offset+pickupCoords.size()) {
-                    picks.add(good.get(idx-offset).getPickup());
-                }
+                if (idx >= offset && idx < offset + pickupCoords.size())
+                    picks.add(good.get(idx - offset).getPickup());
             }
-            result.put("driver"+(v+1), picks);
+            if (!picks.isEmpty())
+                result.put("driver" + (v + 1), picks);
         });
         return result;
     }
 
-    /** 2) Google Maps URL’leri (gidiş & dönüş) */
+    /* ═════════════════════════════════════════════════════════════
+       2)  → Google Maps URL’leri
+       ═════════════════════════════════════════════════════════════ */
     @GetMapping("/optimized/mapsUrls")
     public Map<String, Map<String,String>> optimizedMaps(
             @RequestParam(defaultValue = "1970-01-01")
@@ -117,69 +125,66 @@ public class RouteController {
 
         Map<String,List<String>> routes = optimizedRoutes(after);
         Map<String,Map<String,String>> urls = new LinkedHashMap<>();
+
+        int idx = 0;
         for (var e : routes.entrySet()) {
-            String drv   = e.getKey();
-            List<String> picks = e.getValue();
-            String origin     = DRIVER_ADDRS.get(Integer.parseInt(drv.substring(6))-1);
+            List<String> picks  = e.getValue();
+            String origin = DRIVER_ADDRS.get(idx % DRIVER_ADDRS.size());
 
-            String goUrl      = buildMapsUrl(origin, LAND_OF_LEGENDS, picks);
-            List<String> retW = new ArrayList<>(picks);
-            Collections.reverse(retW);
-            String returnUrl  = buildMapsUrl(LAND_OF_LEGENDS, origin, retW);
+            String goUrl  = buildMapsUrl(origin, LAND_OF_LEGENDS, picks);
+            List<String> ret = new ArrayList<>(picks); Collections.reverse(ret);
+            String retUrl = buildMapsUrl(LAND_OF_LEGENDS, origin, ret);
 
-            urls.put(drv, Map.of("go", goUrl, "return", returnUrl));
+            urls.put(e.getKey(), Map.of("go", goUrl, "return", retUrl));
+            idx++;
         }
         return urls;
     }
 
-    /** 3) Her durak için varış-ayrılış (10dk bekleme) */
+    /* ═════════════════════════════════════════════════════════════
+       3)  → Varış-ayrılış saatleri (10 dk bekleme)
+       ═════════════════════════════════════════════════════════════ */
     @GetMapping("/optimized/schedules")
     public Map<String, List<Map<String,String>>> optimizedSchedules(
             @RequestParam(defaultValue = "1970-01-01")
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate after
     ) throws Exception {
+
         Map<String,List<String>> routes = optimizedRoutes(after);
         Map<String,List<Map<String,String>>> schedules = new LinkedHashMap<>();
 
+        int idx = 0;
         for (var e : routes.entrySet()) {
-            String drv = e.getKey();
+            String origin = DRIVER_ADDRS.get(idx % DRIVER_ADDRS.size());
             List<String> picks = e.getValue();
-            String origin = DRIVER_ADDRS.get(Integer.parseInt(drv.substring(6))-1);
 
-            // Google’dan gidiş rotası
             DirectionsResult dr = routeService.buildRoute(origin, picks, LAND_OF_LEGENDS);
 
-            List<Map<String,String>> infoList = new ArrayList<>();
-            LocalTime cursor = LocalTime.of(9,0); // sabit başlama saati
-
-            // her bir leg için varış & +10dk ayrılış
+            List<Map<String,String>> info = new ArrayList<>();
+            LocalTime t = LocalTime.of(9,0);
             for (var leg : dr.routes[0].legs) {
-                long secs = leg.duration.inSeconds;
-                LocalTime arrival  = cursor.plusSeconds(secs);
-                LocalTime departure= arrival.plusMinutes(10);
-
+                t = t.plusSeconds(leg.duration.inSeconds);
                 Map<String,String> m = new LinkedHashMap<>();
-                m.put("stop",      leg.startAddress);
-                m.put("arrival",   arrival.toString());
-                m.put("departure", departure.toString());
-                infoList.add(m);
-
-                cursor = departure;
+                m.put("stop", leg.startAddress);
+                m.put("arrival", t.toString());
+                t = t.plusMinutes(10);
+                m.put("departure", t.toString());
+                info.add(m);
             }
-            schedules.put(drv, infoList);
+            schedules.put(e.getKey(), info);
+            idx++;
         }
         return schedules;
     }
 
+    /* ───────────── Yardımcı ───────────── */
     private String buildMapsUrl(String origin, String destination, List<String> wps) {
-        String base = "https://www.google.com/maps/dir/?api=1";
         Function<String,String> enc = s -> URLEncoder.encode(s, StandardCharsets.UTF_8);
-        String wp = wps.isEmpty() ? ""
-                : "&waypoints=" + String.join("%7C", wps.stream().map(enc).toList());
-        return base +
+        String wp = wps.isEmpty() ? "" :
+                "&waypoints=" + String.join("%7C", wps.stream().map(enc).toList());
+        return "https://www.google.com/maps/dir/?api=1" +
                 "&origin="      + enc.apply(origin) +
                 "&destination=" + enc.apply(destination) +
-                "&travelmode=driving" +
-                wp;
+                "&travelmode=driving" + wp;
     }
 }

@@ -29,6 +29,12 @@ import java.util.stream.LongStream;
 @Service
 @Slf4j
 public class VrpService {
+    private List<double[]> lastStarts = Collections.emptyList();
+
+    public List<double[]> getLastStarts() {      // RouteController erişecek
+        return lastStarts;
+    }
+
 
     public Map<Integer, List<Integer>> solveVrp(
             List<double[]> driverStarts,
