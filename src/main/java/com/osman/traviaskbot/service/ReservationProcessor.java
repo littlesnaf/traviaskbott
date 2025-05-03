@@ -99,52 +99,61 @@ public class ReservationProcessor {
     }
 
     public List<Route> getVrpResults(LocalDate after) {
-        // (a) Onaylı, pickup’u dolu DTO’ları çek
+
+        /* (a) DTO’ları al */
         List<ReservationDto> dtos = fetchDtos(after);
 
-        // (b) Sürücü adreslerini olduğu gibi al (distinct yok)
+        /* (b) Şoför hub’ları + Kemer kontrolü */
         List<String> driverAddrs = RouteController.DRIVER_ADDRS;
         List<double[]> driverStarts = new ArrayList<>();
+        List<Boolean>  isKemerDriver = new ArrayList<>();
+
         for (String addr : driverAddrs) {
             try {
                 driverStarts.add(routeService.toLatLng(addr));
+                isKemerDriver.add(addr.toLowerCase().contains("kemer"));
             } catch (Exception e) {
                 log.error("Driver geocode failed: {}", addr, e);
-                // istersen continue ile atlayabilir veya patlatabilirsin
             }
         }
 
-        // (c) Rezervasyon pickup’larını geocode et
-        List<double[]> pickups = new ArrayList<>();
-        List<Integer> paxList  = new ArrayList<>();
+        /* (c) Pickup’ları hazırla */
+        List<double[]> pickups   = new ArrayList<>();
+        List<Integer>  paxList   = new ArrayList<>();
+        List<Integer>  regions   = new ArrayList<>();
+
         for (ReservationDto d : dtos) {
             try {
                 pickups.add(routeService.toLatLng(d.getPickup()));
                 paxList.add(d.getAdults() + d.getChildren());
+
+                String dist = d.getDistrict();
+                if (List.of("Kemer","Beldibi","Çamyuva","Göynük").contains(dist))
+                    regions.add(RouteController.Region.KEMER.ordinal());
+                else if (List.of("Side","Sorgun","Evrenseki","Çolaklı",
+                        "Kızılot","Kızılğaç","Manavgat").contains(dist))
+                    regions.add(RouteController.Region.SIDE.ordinal());
+                else  regions.add(RouteController.Region.OTHER.ordinal());
+
             } catch (Exception ex) {
-                log.warn("Pickup geocode başarısız, atlanıyor: {}", d.getPickup());
+                log.warn("Pickup geocode atlandı: {}", d.getPickup());
             }
         }
-        if (pickups.isEmpty()) {
-            return Collections.emptyList();
-        }
+        if (pickups.isEmpty()) return Collections.emptyList();
 
-        // (d) VRP servisini çağır
-        Map<Integer,List<Integer>> solution = vrpService.solveVrp(
-                driverStarts,
-                pickups,
-                paxList,
-                driverStarts.size()    // araç sayısı da driverStarts’ın uzunluğu kadar
+        /* (d) Solve */
+        Map<Integer, List<Integer>> sol = vrpService.solveVrp(
+                driverStarts, pickups, paxList, regions, isKemerDriver, driverStarts.size()
         );
 
-        // (e) Çıkan indeksi Route objesine dönüştür
+        /* (e) Rota DTO’su döndür */
         List<Route> routes = new ArrayList<>();
-        solution.forEach((veh, nodes) -> {
-            double dist = nodes.size() * 1.0;
-            routes.add(new Route("driver" + (veh + 1), dist));
-        });
+        sol.forEach((veh, nodes) ->
+                routes.add(new Route("driver" + (veh + 1), nodes.size() - 1)) // -1 = depo hariç
+        );
         return routes;
     }
+
 
 
 

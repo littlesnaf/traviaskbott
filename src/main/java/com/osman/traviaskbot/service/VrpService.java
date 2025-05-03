@@ -1,24 +1,10 @@
-// src/main/java/com/osman/traviaskbot/service/VrpService.java
 package com.osman.traviaskbot.service;
 
-import com.google.protobuf.Descriptors.Descriptor;
-
 import com.google.ortools.Loader;
-import com.google.ortools.constraintsolver.Assignment;
-import com.google.ortools.constraintsolver.FirstSolutionStrategy;
-import com.google.ortools.constraintsolver.LocalSearchMetaheuristic;
-import com.google.ortools.constraintsolver.main;
-import com.google.ortools.constraintsolver.RoutingDimension;
-import com.google.ortools.constraintsolver.RoutingIndexManager;
-import com.google.ortools.constraintsolver.RoutingModel;
-import com.google.ortools.constraintsolver.RoutingSearchParameters;
-import com.google.ortools.constraintsolver.RoutingSearchParameters.LocalSearchNeighborhoodOperators;
-                     // ← defaultRoutingSearchParameters()
-import com.google.ortools.util.OptionalBoolean;                     // ← proto enu
-import com.google.ortools.constraintsolver.RoutingSearchParameters.LocalSearchNeighborhoodOperators;
-import com.google.protobuf.Descriptors;
+import com.google.ortools.constraintsolver.*;
 import com.google.protobuf.Duration;
 import com.google.ortools.util.OptionalBoolean;
+import com.osman.traviaskbot.controller.RouteController.Region;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -29,153 +15,156 @@ import java.util.stream.LongStream;
 @Service
 @Slf4j
 public class VrpService {
-    private List<double[]> lastStarts = Collections.emptyList();
 
-    public List<double[]> getLastStarts() {      // RouteController erişecek
-        return lastStarts;
-    }
+    /* ————————————————— public API ————————————————— */
 
-
+    /**
+     * @param driverStarts   hub koordinatları
+     * @param pickups        müşteri koordinatları
+     * @param paxList        her pickup’ın yolcu sayısı
+     * @param regions        Region.KEMER / SIDE / OTHER kodları
+     * @param isKemerDriver  her aracın Kemer çıkışlı olup olmadığı
+     * @param numVehicles    toplam araç
+     */
     public Map<Integer, List<Integer>> solveVrp(
             List<double[]> driverStarts,
             List<double[]> pickups,
-            List<Integer> paxList,
-            int numVehicleParam) {
+            List<Integer>  paxList,
+            List<Integer>  regions,
+            List<Boolean>  isKemerDriver,
+            int            numVehicles) {
 
         Loader.loadNativeLibraries();
 
-        // 1) Araç ve düğüm sayıları
-        int D = driverStarts.size();
-        int N = pickups.size();
-        int vehicleCount = D;
-        int nodeCount = D + N + 1;
+        /* ---------- temel metrikler ---------- */
+        final int H = driverStarts.size();
+        final int N = pickups.size();
+        final int nodeCount = H + N + 1;             // + depo
 
-        // 2) Başlangıç/bitiş indeksleri
-        int[] starts = IntStream.range(0, D).toArray();
-        int[] ends   = IntStream.generate(() -> nodeCount - 1)
-                .limit(vehicleCount)
-                .toArray();
+        RoutingIndexManager mgr = new RoutingIndexManager(
+                nodeCount,
+                numVehicles,
+                IntStream.range(0, H).toArray(),      // starts
+                IntStream.generate(() -> nodeCount - 1)
+                        .limit(numVehicles).toArray()/* ends (=depo) */
+        );
+        RoutingModel routing = new RoutingModel(mgr);
 
-        // 3) Manager & Model
-        RoutingIndexManager mgr     = new RoutingIndexManager(nodeCount, vehicleCount, starts, ends);
-        RoutingModel        routing = new RoutingModel(mgr);
+        /* ---------- mesafe matrisi ---------- */
+        long[][] dist = buildDistanceMatrix(driverStarts, pickups, nodeCount, H);
 
-        // 4) Koordinatlar ve mesafe matrisi
-        double[][] nodes = new double[nodeCount][2];
-        for (int i = 0; i < D; i++)      nodes[i]     = driverStarts.get(i);
-        for (int i = 0; i < N; i++)      nodes[D + i] = pickups.get(i);
-        nodes[nodeCount - 1] = new double[]{36.876074, 31.086317};  // depo
-
-        long[][] dist = new long[nodeCount][nodeCount];
-        for (int i = 0; i < nodeCount; i++)
-            for (int j = 0; j < nodeCount; j++)
-                dist[i][j] = (i == j)
-                        ? 0
-                        : Math.round(haversine(nodes[i], nodes[j]) * 1000);
-
-        // 5) Transit callback & cost
-        int transitCb = routing.registerTransitCallback((long fromIdx, long toIdx) -> {
-            int i = mgr.indexToNode(fromIdx);
-            int j = mgr.indexToNode(toIdx);
-            return dist[i][j];
+        int transitCb = routing.registerTransitCallback((f, t) -> {
+            int i = mgr.indexToNode(f);
+            int j = mgr.indexToNode(t);
+            long d = dist[i][j];
+            return routing.isStart(f) ? d * 5 /* ilk bacak cezası */ : d;
         });
         routing.setArcCostEvaluatorOfAllVehicles(transitCb);
 
-        // 6) Kapasite dimension
+        /* ---------- yolcu kapasitesi ---------- */
         long[] demand = new long[nodeCount];
-        for (int i = 0; i < N; i++) demand[D + i] = paxList.get(i);
+        for (int i = 0; i < N; i++) demand[H + i] = paxList.get(i);
+
         int demandCb = routing.registerUnaryTransitCallback(idx ->
-                demand[mgr.indexToNode(idx)]
-        );
-        long[] caps = LongStream.generate(() -> 16L).limit(vehicleCount).toArray();
+                demand[mgr.indexToNode(idx)]);
+
         routing.addDimensionWithVehicleCapacity(
-                demandCb, 0, caps, true, "Capacity"
+                demandCb, 0,
+                LongStream.generate(() -> 16L).limit(numVehicles).toArray(),
+                true, "Capacity"
         );
 
-        // 7) Distance dimension (global span cost)
+        /* ---------- bölge kısıtları ---------- */
+        int[] kemerVeh = IntStream.range(0, numVehicles)
+                .filter(isKemerDriver::get)
+                .toArray();
+        int[] nonKemer = IntStream.range(0, numVehicles)
+                .filter(v -> !isKemerDriver.get(v))
+                .toArray();
+
+        for (int k = 0; k < N; k++) {
+            long nodeIdx = mgr.nodeToIndex(H + k);
+            switch (Region.values()[regions.get(k)]) {
+                case SIDE  -> routing.setAllowedVehiclesForIndex(nonKemer, nodeIdx);
+                case KEMER -> routing.setAllowedVehiclesForIndex(kemerVeh,  nodeIdx);
+                default    -> { /* OTHER – serbest */ }
+            }
+        }
+
+        /* ---------- mesafe dimension ---------- */
         routing.addDimension(transitCb, 0, 1_000_000_000L, true, "Distance");
-        RoutingDimension distDim = routing.getDimensionOrDie("Distance");
-        distDim.setGlobalSpanCostCoefficient(500);
+        routing.getDimensionOrDie("Distance").setGlobalSpanCostCoefficient(500);
 
-        // 8) Pickup’ları optional yap
-        long pickupPenalty = 10_000000L;
-        for (int i = 0; i < N; i++) {
-            long idx = mgr.nodeToIndex(D + i);
-            routing.addDisjunction(new long[]{idx}, pickupPenalty);
-        }
+        /* ---------- optional pickup + unused cezası ---------- */
+        long pickupPenalty = 10_000_000L;
+        for (int i = 0; i < N; i++)
+            routing.addDisjunction(new long[]{mgr.nodeToIndex(H + i)}, pickupPenalty);
 
-        // 9) Araç unused cezası
-        long vehicleUnusedPenalty = 1000000L;
-        for (int v = 0; v < vehicleCount; v++) {
-            long startIdx = routing.start(v);
-            routing.addDisjunction(new long[]{startIdx}, vehicleUnusedPenalty);
-        }
+        long unusedPenalty = 1_000_000L;
+        for (int v = 0; v < numVehicles; v++)
+            routing.addDisjunction(new long[]{routing.start(v)}, unusedPenalty);
 
-        // … önceki kod …
-
-// 10) Search parameters oluştur (varsayılanı alıp sadece 3 operatörü değiştiriyoruz)
-        // --------------------------------------------------------------------------------
-        // 10a) Varsayılan parametreleri al
-        RoutingSearchParameters defaultParams =
-                main.defaultRoutingSearchParameters();
-
-        // 10b) İçindeki operatör setini al
-        LocalSearchNeighborhoodOperators defaultOps =
-                defaultParams.getLocalSearchOperators();
-
-        // 10c) Sadece ihtiyacımız olan üç operatörü açık bırak, geri kalanı otomatik olarak kalır
-        LocalSearchNeighborhoodOperators customOps = defaultOps.toBuilder()
-                .setUseRelocate(OptionalBoolean.BOOL_TRUE)
-                .setUseTwoOpt(OptionalBoolean.BOOL_TRUE)
-                .setUseExchange(OptionalBoolean.BOOL_TRUE)
-                .build();
-
-        // 10d) Parametreleri güncelle ve customOps’u yerleştir
-        RoutingSearchParameters params = defaultParams.toBuilder()
-                .setFirstSolutionStrategy(
-                        FirstSolutionStrategy.Value.SAVINGS)
-                .setLocalSearchMetaheuristic(
-                        LocalSearchMetaheuristic.Value.GUIDED_LOCAL_SEARCH)
+        /* ---------- arama parametreleri ---------- */
+        RoutingSearchParameters params = main.defaultRoutingSearchParameters().toBuilder()
+                .setFirstSolutionStrategy(FirstSolutionStrategy.Value.SAVINGS)
+                .setLocalSearchMetaheuristic(LocalSearchMetaheuristic.Value.GUIDED_LOCAL_SEARCH)
                 .setTimeLimit(Duration.newBuilder().setSeconds(5).build())
-                .setLocalSearchOperators(customOps)
-                .build();
+                .setLocalSearchOperators(
+                        main.defaultRoutingSearchParameters().getLocalSearchOperators().toBuilder()
+                                .setUseRelocate(OptionalBoolean.BOOL_TRUE)
+                                .setUseTwoOpt(OptionalBoolean.BOOL_TRUE)
+                                .setUseExchange(OptionalBoolean.BOOL_TRUE)
+                                .build()
+                ).build();
 
-        // 11) Çözümü çalıştır
         Assignment sol = routing.solveWithParameters(params);
-
-// … sonraki kod …
-
-
-
-
         if (sol == null) {
             log.warn("❌ VRP çözüm bulunamadı");
             return Collections.emptyMap();
         }
 
-        // 12) Rotaları oku
-        Map<Integer, List<Integer>> result = new LinkedHashMap<>();
-        for (int v = 0; v < vehicleCount; v++) {
-            long idx = routing.start(v);
+        /* ---------- rotaları çıkar ---------- */
+        Map<Integer, List<Integer>> routes = new LinkedHashMap<>();
+        for (int v = 0; v < numVehicles; v++) {
             List<Integer> route = new ArrayList<>();
-            while (!routing.isEnd(idx)) {
+            for (long idx = routing.start(v); !routing.isEnd(idx);
+                 idx = sol.value(routing.nextVar(idx)))
                 route.add(mgr.indexToNode(idx));
-                idx = sol.value(routing.nextVar(idx));
-            }
-            route.add(mgr.indexToNode(idx));  // depo
-            result.put(v, route);
+
+            route.add(mgr.indexToNode(routing.end(v))); // depo
+            routes.put(v, route);
         }
-        return result;
+        return routes;
     }
 
-    /** Haversine (km) */
+    /* ————————————————— helpers ————————————————— */
+
+    private long[][] buildDistanceMatrix(List<double[]> hubs,
+                                         List<double[]> pick,
+                                         int nodeCount, int H) {
+
+        double[][] P = new double[nodeCount][2];
+        for (int i = 0; i < H; i++)          P[i]      = hubs.get(i);
+        for (int i = 0; i < pick.size(); i++)P[H + i]  = pick.get(i);
+        P[nodeCount - 1] = new double[]{36.876074, 31.086317}; // depo
+
+        long[][] d = new long[nodeCount][nodeCount];
+        for (int i = 0; i < nodeCount; i++)
+            for (int j = 0; j < nodeCount; j++)
+                d[i][j] = (i == j) ? 0 : Math.round(haversine(P[i], P[j]) * 1000);
+
+        return d;
+    }
+
+    /** haversine – km */
     private static double haversine(double[] a, double[] b) {
-        double R    = 6371;
-        double dLat = Math.toRadians(b[0] - a[0]);
-        double dLng = Math.toRadians(b[1] - a[1]);
-        double s = Math.sin(dLat/2)*Math.sin(dLat/2)
-                + Math.cos(Math.toRadians(a[0]))*Math.cos(Math.toRadians(b[0]))
-                * Math.sin(dLng/2)*Math.sin(dLng/2);
-        return 2 * R * Math.asin(Math.sqrt(s));
+        double R = 6371,
+                dLat = Math.toRadians(b[0] - a[0]),
+                dLng = Math.toRadians(b[1] - a[1]);
+        double h = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(Math.toRadians(a[0])) *
+                        Math.cos(Math.toRadians(b[0])) *
+                        Math.sin(dLng / 2) * Math.sin(dLng / 2);
+        return 2 * R * Math.asin(Math.sqrt(h));
     }
 }

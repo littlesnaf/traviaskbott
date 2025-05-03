@@ -2,83 +2,56 @@ package com.osman.traviaskbot.service;
 
 import com.google.maps.GeoApiContext;
 import com.google.maps.GeocodingApi;
+import com.google.maps.errors.ZeroResultsException;
 import com.google.maps.model.GeocodingResult;
-import com.osman.traviaskbot.util.AddressValidator;
 import com.osman.traviaskbot.exception.AddressValidationException;
+import com.osman.traviaskbot.util.AddressValidator;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+
 import java.util.HashSet;
 import java.util.Set;
 
 @Service
+@RequiredArgsConstructor          // << GeoApiContext artık DI ile geliyor
 @Slf4j
 public class GeocodingService {
 
-    private final GeoApiContext context;
-    private final Set<String> processedAddresses = new HashSet<>(); // Adresleri izlemek için set
+    private final GeoApiContext context;           // <‑‑ @Configuration’da tanımlı
+    private final Set<String> processed = new HashSet<>();
 
-    public GeocodingService() {
-        this.context = new GeoApiContext.Builder()
-                .apiKey(System.getProperty("google.maps.api-key"))
-                .build();
-    }
+    public double[] geocode(String raw) {
 
-    /**
-     * Adres bilgisinden [latitude, longitude] döner.
-     */
-    public double[] geocode(String address) {
-        address = normalizeAddress(address);  // Adresi normalize ediyoruz
+        String address = normalize(raw);
 
-        // Adresin daha önce işlenip işlenmediğini kontrol et
-        if (processedAddresses.contains(address)) {
-            log.warn("❗ Adres daha önce işlendi: {}", address);
-            return null; // Daha önce işlenmiş adresi geç
+        /* cache & validasyon */
+        if (!AddressValidator.isValid(address) || processed.contains(address)) {
+            log.warn("❗ Geocode atlandı: {}", address);
+            throw new AddressValidationException("Invalid or duplicate address: " + address);
         }
 
         try {
-            // Adres geçerli mi kontrol et
-            if (!AddressValidator.isValid(address)) {
-                log.warn("❗ Geocode iptal edildi. Geçersiz adres: {}", address);
-                throw new AddressValidationException("Geocode iptal: Geçersiz adres -> " + address);
-            }
+            GeocodingResult[] res = GeocodingApi.geocode(context, address).await();
+            if (res.length == 0) throw new ZeroResultsException("No geocode: " + address);
 
-            GeocodingResult[] results = GeocodingApi.geocode(context, address).await();
-            if (results.length == 0) {
-                log.warn("❗ Adres bulunamadı: {}", address);
-                throw new RuntimeException("Adres bulunamadı: " + address);
-            }
-
-            // Geocoding sonuçlarını işleyin
-            double lat = results[0].geometry.location.lat;
-            double lng = results[0].geometry.location.lng;
-            log.info("📍 Geocode başarılı: {} -> {}, {}", address, lat, lng);
-
-            // İşlem sonrası adresi kaydedin
-            processedAddresses.add(address);
-
-            return new double[]{lat, lng};
-
+            processed.add(address);
+            return new double[]{
+                    res[0].geometry.location.lat,
+                    res[0].geometry.location.lng
+            };
         } catch (Exception e) {
-            log.error("❌ Geocode hatası: {}", address, e);
-            throw new RuntimeException("Geocode hatası: " + address, e);
+            log.error("❌ Geocode error: {}", address, e);
+            throw new RuntimeException(e);
         }
     }
 
-    /**
-     * Adresi normalize eder: boşlukları düzeltir, gereksiz karakterleri temizler.
-     */
-    private String normalizeAddress(String address) {
-        if (address == null) {
-            return null;
-        }
-        // Baş ve sondaki boşlukları temizle
-        String normalized = address.trim();
-        // Virgülden önce boşluk varsa kaldır
-        normalized = normalized.replaceAll("\\s+,", ",");
-        // Virgülden sonra boşluk yoksa boşluk ekle
-        normalized = normalized.replaceAll(",(\\S)", ", $1");
-        // Birden fazla boşluğu teke indir
-        normalized = normalized.replaceAll("\\s{2,}", " ");
-        return normalized;
+    /* yardımcı */
+    private String normalize(String a) {
+        if (a == null) return "";
+        return a.trim()
+                .replaceAll("\\s+,", ",")
+                .replaceAll(",(\\S)", ", $1")
+                .replaceAll("\\s{2,}", " ");
     }
 }

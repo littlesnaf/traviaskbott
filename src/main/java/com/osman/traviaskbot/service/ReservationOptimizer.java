@@ -1,16 +1,15 @@
 package com.osman.traviaskbot.service;
 
+import com.osman.traviaskbot.controller.RouteController.Region;
 import com.osman.traviaskbot.entity.Reservation;
 import com.osman.traviaskbot.repository.ReservationRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 @Service
 @RequiredArgsConstructor
@@ -21,82 +20,69 @@ public class ReservationOptimizer {
     private final GeocodingService geocodingService;
     private final VrpService vrpService;
 
+    /** Depo koordinatı (Land of Legends) */
+    private static final double[] DEPOT = {36.876074, 31.086317};
+
     public void optimize(List<Reservation> reservations) {
-        log.info("\uD83D\uDEA0 Optimize ediliyor, toplam rezervasyon: {}", reservations.size());
 
-        // Geçerli pickup adresi olanları filtrele
-        List<Reservation> validReservations = reservations.stream()
+        /* 1) pickup’ı dolu rezervasyonlar */
+        List<Reservation> valid = reservations.stream()
                 .filter(r -> r.getPickup() != null && !r.getPickup().isBlank())
-                .collect(Collectors.toList());
-
-        int skippedCount = reservations.size() - validReservations.size();
-        if (skippedCount > 0) {
-            List<String> skippedNames = reservations.stream()
-                    .filter(r -> r.getPickup() == null || r.getPickup().isBlank())
-                    .map(Reservation::getCustomer)
-                    .collect(Collectors.toList());
-            log.warn("❗ {} rezervasyon pickup adresi eksik, optimize edilmeyecek. Müşteriler: {}", skippedCount, skippedNames);
-        }
-
-        if (validReservations.isEmpty()) {
-            log.warn("❌ Geçerli pickup adresi olan hiç rezervasyon bulunamadı. Optimize işlemi iptal.");
+                .toList();
+        if (valid.isEmpty()) {
+            log.warn("❌ Optimize – pickup adresi yok.");
             return;
         }
 
-        // Şoför başlangıç noktaları
-        List<double[]> driverStarts = new ArrayList<>();
-        driverStarts.add(new double[]{36.876074, 31.086317}); // depo koordinatı
+        /* 2) Sürücü başlangıç listesi (tek araç = depo) */
+        List<double[]> driverStarts = List.of(DEPOT);
+        List<Boolean>  kemerFlags   = List.of(false);   // tek araç Kemer değil
+        int numVehicles = driverStarts.size();
 
-        // Pickup noktalarını coğrafi koordinatlara çevir
+        /* 3) Pickup koordinatları & yolcu & bölge kodu */
+        Map<String,double[]> cache = new HashMap<>();
         List<double[]> pickups = new ArrayList<>();
-        List<Integer> paxList = new ArrayList<>();
+        List<Integer>  paxList = new ArrayList<>();
+        List<Integer>  regions = new ArrayList<>();
 
-        // ❗ Pickup adresleri için cache
-        Map<String, double[]> pickupCache = new HashMap<>();
-
-        for (Reservation res : validReservations) {
+        for (Reservation r : valid) {
             try {
-                double[] latLng;
-                if (pickupCache.containsKey(res.getPickup())) {
-                    latLng = pickupCache.get(res.getPickup());
-                    log.info("♻️ Cache'den alındı: {}", res.getPickup());
-                } else {
-                    latLng = geocodingService.geocode(res.getPickup());
-                    pickupCache.put(res.getPickup(), latLng);
-                    log.info("🧭 Geocode edildi: {}", res.getPickup());
-                }
+                double[] ll = cache.computeIfAbsent(
+                        r.getPickup(),
+                        k -> geocodingService.geocode(k)
+                );
+                pickups.add(ll);
+                paxList.add(r.getAdults() + r.getChildren());
 
-                if (latLng != null) {
-                    pickups.add(latLng);
-                    paxList.add(2); // Şimdilik her rezervasyon 2 kişi gibi
-                } else {
-                    log.warn("❗ Geocode sonucu null geldi: {}", res.getPickup());
-                }
-            } catch (Exception e) {
-                log.warn("❗ Pickup geocode edilemedi, rezervasyon atlandı: {}", res.getPickup(), e);
+                /* varsayılan OTHER – dilerseniz ilçe kontrolü ekleyin */
+                regions.add(Region.OTHER.ordinal());
+
+            } catch (Exception ex) {
+                log.warn("❗ Geocode atlandı: {}", r.getPickup(), ex);
             }
         }
-
         if (pickups.isEmpty()) {
-            log.warn("❌ Hiç pickup noktası bulunamadı, optimizasyon iptal.");
+            log.warn("❌ Optimize – pickup listesi boş.");
             return;
         }
 
-        // VRP çözümü yap
-        Map<Integer, List<Integer>> solution = vrpService.solveVrp(driverStarts, pickups, paxList, driverStarts.size());
-
-        if (solution.isEmpty()) {
-            log.warn("❌ VRP çözümü boş döndü!");
+        /* 4) VRP çözümü */
+        Map<Integer,List<Integer>> sol = vrpService.solveVrp(
+                driverStarts,
+                pickups,
+                paxList,
+                regions,
+                kemerFlags,
+                numVehicles
+        );
+        if (sol.isEmpty()) {
+            log.warn("❌ Optimize – çözüm yok.");
             return;
         }
 
-        // Çözümü logla
-        for (Map.Entry<Integer, List<Integer>> entry : solution.entrySet()) {
-            int vehicle = entry.getKey();
-            List<Integer> route = entry.getValue();
-            log.info("\uD83D\uDE98 Araç {} rotası: {}", vehicle, route);
-        }
-
-        log.info("✅ Rota optimizasyonu başarıyla tamamlandı.");
+        /* 5) Logla */
+        sol.forEach((v,route) ->
+                log.info("🚐 Araç {} → rota düğümleri {}", v, route));
+        log.info("✅ Optimize tamam.");
     }
 }
