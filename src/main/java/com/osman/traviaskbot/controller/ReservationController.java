@@ -33,26 +33,6 @@ public class ReservationController {
     // listeleme: date filtresi artık LocalDate
 
 
-    @GetMapping("/vrp-results")
-public String showVrpResults(
-@RequestParam(defaultValue = "1970-01-01")
-@DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate after,
-Model model
-) {
-List<Route> routes = processor.getVrpResults(after);
-model.addAttribute("routes", routes);
-return "vrp-results";
- }
-
-    @PostMapping("/reservations/update")
-    public String updateReservation(@ModelAttribute Reservation reservation) {
-        // Geçerli rezervasyonu güncelle
-        reservationRepo.save(reservation);  // JPA repository kullanarak rezervasyonu kaydediyoruz.
-        return "redirect:/reservations";  // Rezervasyonlar sayfasına yönlendir.
-    }
-
-
-
     // manuel tetikleme için artık GET de kullanabilirsiniz
     @GetMapping("/trigger")
     public Map<String, String> triggerGet() {

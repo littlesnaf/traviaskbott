@@ -23,6 +23,7 @@ public class Reservation {
     @Column(name = "option_name", length = 3000)
     private String optionName;    // 💡 Yeni
 
+
     private LocalDate date;
     private LocalTime time;
 

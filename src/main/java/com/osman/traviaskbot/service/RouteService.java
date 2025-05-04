@@ -11,6 +11,7 @@ import com.google.maps.model.TravelMode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import com.osman.traviaskbot.config.EnvConfig;
 
 import java.util.List;
 

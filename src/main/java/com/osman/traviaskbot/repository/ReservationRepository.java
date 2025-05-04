@@ -18,4 +18,7 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long> 
     // Diğer hazır sorgular
     List<Reservation> findByStatusOrderByDateAscTimeAsc(String status);
     List<Reservation> findByStatusOrderByDateAsc(String status);
+
+    List<Reservation> findByDate(LocalDate date);
+
 }

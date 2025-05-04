@@ -25,7 +25,7 @@ import java.time.format.DateTimeParseException;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-
+import com.osman.traviaskbot.config.EnvConfig;
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -40,8 +40,10 @@ public class ReservationProcessor {
     private final RouteService           routeService;
     private final VrpService             vrpService;
 
-    @Value("${gmail.user}")     private String gmailUser;
-    @Value("${gmail.password}") private String gmailPass;
+
+    private final String gmailUser = com.osman.traviaskbot.config.EnvConfig.getGmailUser();
+    private final String gmailPass = com.osman.traviaskbot.config.EnvConfig.getGmailPassword();
+
 
     public void processReservations() {
         int ok = 0, fail = 0;
