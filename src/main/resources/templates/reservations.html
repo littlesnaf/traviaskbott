@@ -19,10 +19,20 @@
         <form action="/optimize" method="post" class="m-0">
             <button type="submit" class="btn btn-primary">Optimize Routes</button>
         </form>
-
         <button class="btn btn-success" onclick="showAddModal()">+ Add Reservation</button>
-        <button class="btn btn-danger"  onclick="deleteSelected()">🗑️ Delete Selected</button>
+        <button class="btn btn-danger" onclick="deleteSelected()">🗑️ Delete Selected</button>
         <button class="btn btn-secondary" onclick="exportTableToCSV('reservations.csv')">⬇️ Export CSV</button>
+    </div>
+
+    <!-- filtreleme alanı -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <label for="filterDate" class="form-label">Filter by Date:</label>
+            <input id="filterDate" type="date" class="form-control">
+        </div>
+        <div class="col-md-2 d-flex align-items-end">
+            <button id="clearFilter" class="btn btn-outline-secondary w-100">Clear Filter</button>
+        </div>
     </div>
 
     <!-- tablo -->
@@ -33,7 +43,6 @@
             <th>ID</th>
             <th>Customer</th>
             <th>Tour</th>
-            <!-- Burayı Option → Phone olarak güncelledik -->
             <th>Phone</th>
             <th>Pickup</th>
             <th>District</th>
@@ -52,7 +61,6 @@
             <td th:text="${r.id}"></td>
             <td th:text="${r.customer}"></td>
             <td th:text="${r.tour}"></td>
-            <!-- Burayı r.optionName → r.phone olarak değiştirdik -->
             <td th:text="${r.phone}"></td>
             <td th:text="${r.pickup}"></td>
             <td th:text="${r.district}"></td>
@@ -68,7 +76,7 @@
     </table>
 </div>
 
-<!--  Bootstrap bundle -->
+<!-- Bootstrap bundle -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script>
     /* Select / bulk delete */
@@ -105,7 +113,7 @@
     });
 
     /* Frontend sıralama (Tour→District→Date→Time) */
-    document.addEventListener('DOMContentLoaded', () => {
+    function sortTable() {
         const tbody = document.querySelector('table tbody');
         const rows  = Array.from(tbody.querySelectorAll('tr'));
         rows.sort((a, b) => {
@@ -126,6 +134,28 @@
             return timeA.localeCompare(timeB);
         });
         rows.forEach(r => tbody.appendChild(r));
+    }
+
+    /* Filter by Date */
+    function filterTableByDate() {
+        const filterVal = document.getElementById('filterDate').value;
+        const rows = document.querySelectorAll('table tbody tr');
+        rows.forEach(r => {
+            const dateCell = r.children[7].textContent.trim();
+            r.style.display = (!filterVal || dateCell === filterVal) ? '' : 'none';
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        sortTable();
+
+        document.getElementById('filterDate')
+            .addEventListener('change', filterTableByDate);
+        document.getElementById('clearFilter')
+            .addEventListener('click', () => {
+                document.getElementById('filterDate').value = '';
+                filterTableByDate();
+            });
     });
 
     /* CSV export */
@@ -133,7 +163,7 @@
         const rows = Array.from(document.querySelectorAll('table tr'));
         const csv = rows.map(row => {
             const cols = Array.from(row.querySelectorAll('th, td'))
-                .filter((_,i) => i!==0) // checkbox hücresini atla
+                .filter((_,i) => i !== 0) // checkbox hücresini atla
                 .map(cell => `"${cell.textContent.trim().replace(/"/g,'""')}"`);
             return cols.join(',');
         }).join('\r\n');

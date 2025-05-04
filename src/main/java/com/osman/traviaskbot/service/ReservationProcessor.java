@@ -123,15 +123,20 @@ public class ReservationProcessor {
         try (Store store = Session.getDefaultInstance(new Properties()).getStore("imaps")) {
             store.connect(HOST, gmailUser, gmailPass);
             Folder inbox = store.getFolder("INBOX");
-            inbox.open(Folder.READ_ONLY);
+            inbox.open(Folder.READ_WRITE);
 
             Message[] msgs = inbox.search(new FlagTerm(new Flags(Flags.Flag.SEEN), false));
             for (int i = Math.max(0, msgs.length - MAX_EMAILS); i < msgs.length; i++) {
-                if (!isValidSender(msgs[i])) continue;
-                String body = extractBody(msgs[i]);
+                Message msg = msgs[i];
+                if (!isValidSender(msg)) continue;
+                String body = extractBody(msg);
                 if (body != null && !body.isBlank()) {
                     bodies.add(body);
+                    // 3️⃣ Mark as read
+                    msg.setFlag(Flags.Flag.SEEN, true);
                 }
+
+
             }
             inbox.close(false);
         } catch (Exception ex) {
