@@ -1,29 +1,33 @@
-C:\Users\asoyd\OneDrive\Masaüstü\traviaskbott 2\traviaskbott\src\main\java\com\osman\traviaskbot\config\GoogleMapsConfig.java
-C:\Users\asoyd\OneDrive\Masaüstü\traviaskbott 2\traviaskbott\src\main\java\com\osman\traviaskbot\controller\DriverController.java
-C:\Users\asoyd\OneDrive\Masaüstü\traviaskbott 2\traviaskbott\src\main\java\com\osman\traviaskbot\controller\ReservationController.java
-C:\Users\asoyd\OneDrive\Masaüstü\traviaskbott 2\traviaskbott\src\main\java\com\osman\traviaskbot\controller\ReservationPageController.java
-C:\Users\asoyd\OneDrive\Masaüstü\traviaskbott 2\traviaskbott\src\main\java\com\osman\traviaskbot\controller\RouteController.java
-C:\Users\asoyd\OneDrive\Masaüstü\traviaskbott 2\traviaskbott\src\main\java\com\osman\traviaskbot\dto\ReservationDto.java
-C:\Users\asoyd\OneDrive\Masaüstü\traviaskbott 2\traviaskbott\src\main\java\com\osman\traviaskbot\entity\Driver.java
-C:\Users\asoyd\OneDrive\Masaüstü\traviaskbott 2\traviaskbott\src\main\java\com\osman\traviaskbot\entity\Reservation.java
-C:\Users\asoyd\OneDrive\Masaüstü\traviaskbott 2\traviaskbott\src\main\java\com\osman\traviaskbot\entity\Route.java
-C:\Users\asoyd\OneDrive\Masaüstü\traviaskbott 2\traviaskbott\src\main\java\com\osman\traviaskbot\entity\UnparsedMail.java
-C:\Users\asoyd\OneDrive\Masaüstü\traviaskbott 2\traviaskbott\src\main\java\com\osman\traviaskbot\exception\AddressValidationException.java
-C:\Users\asoyd\OneDrive\Masaüstü\traviaskbott 2\traviaskbott\src\main\java\com\osman\traviaskbot\exception\GlobalExceptionHandler.java
-C:\Users\asoyd\OneDrive\Masaüstü\traviaskbott 2\traviaskbott\src\main\java\com\osman\traviaskbot\repository\DriverRepository.java
-C:\Users\asoyd\OneDrive\Masaüstü\traviaskbott 2\traviaskbott\src\main\java\com\osman\traviaskbot\repository\ReservationRepository.java
-C:\Users\asoyd\OneDrive\Masaüstü\traviaskbott 2\traviaskbott\src\main\java\com\osman\traviaskbot\repository\UnparsedMailRepository.java
-C:\Users\asoyd\OneDrive\Masaüstü\traviaskbott 2\traviaskbott\src\main\java\com\osman\traviaskbot\scheduler\ReservationScheduler.java
-C:\Users\asoyd\OneDrive\Masaüstü\traviaskbott 2\traviaskbott\src\main\java\com\osman\traviaskbot\service\AddressValidator.java
-C:\Users\asoyd\OneDrive\Masaüstü\traviaskbott 2\traviaskbott\src\main\java\com\osman\traviaskbot\service\AlternativeGeocodingService.java
-C:\Users\asoyd\OneDrive\Masaüstü\traviaskbott 2\traviaskbott\src\main\java\com\osman\traviaskbot\service\DriverService.java
-C:\Users\asoyd\OneDrive\Masaüstü\traviaskbott 2\traviaskbott\src\main\java\com\osman\traviaskbot\service\EmailService.java
-C:\Users\asoyd\OneDrive\Masaüstü\traviaskbott 2\traviaskbott\src\main\java\com\osman\traviaskbot\service\GeocodingService.java
-C:\Users\asoyd\OneDrive\Masaüstü\traviaskbott 2\traviaskbott\src\main\java\com\osman\traviaskbot\service\LoggerService.java
-C:\Users\asoyd\OneDrive\Masaüstü\traviaskbott 2\traviaskbott\src\main\java\com\osman\traviaskbot\service\ReservationOptimizer.java
-C:\Users\asoyd\OneDrive\Masaüstü\traviaskbott 2\traviaskbott\src\main\java\com\osman\traviaskbot\service\ReservationProcessor.java
-C:\Users\asoyd\OneDrive\Masaüstü\traviaskbott 2\traviaskbott\src\main\java\com\osman\traviaskbot\service\RouteService.java
-C:\Users\asoyd\OneDrive\Masaüstü\traviaskbott 2\traviaskbott\src\main\java\com\osman\traviaskbot\service\VrpService.java
-C:\Users\asoyd\OneDrive\Masaüstü\traviaskbott 2\traviaskbott\src\main\java\com\osman\traviaskbot\TraviaskBotApplication.java
-C:\Users\asoyd\OneDrive\Masaüstü\traviaskbott 2\traviaskbott\src\main\java\com\osman\traviaskbot\util\AddressValidator.java
-C:\Users\asoyd\OneDrive\Masaüstü\traviaskbott 2\traviaskbott\src\main\java\com\osman\traviaskbot\util\DistrictExtractor.java
+C:\Users\asoyd\OneDrive\Masaüstü\traviaskbott-main\src\main\java\com\osman\traviaskbot\config\EnvConfig.java
+C:\Users\asoyd\OneDrive\Masaüstü\traviaskbott-main\src\main\java\com\osman\traviaskbot\config\GoogleMapsConfig.java
+C:\Users\asoyd\OneDrive\Masaüstü\traviaskbott-main\src\main\java\com\osman\traviaskbot\controller\DriverController.java
+C:\Users\asoyd\OneDrive\Masaüstü\traviaskbott-main\src\main\java\com\osman\traviaskbot\controller\ReservationController.java
+C:\Users\asoyd\OneDrive\Masaüstü\traviaskbott-main\src\main\java\com\osman\traviaskbot\controller\ReservationPageController.java
+C:\Users\asoyd\OneDrive\Masaüstü\traviaskbott-main\src\main\java\com\osman\traviaskbot\controller\RouteController.java
+C:\Users\asoyd\OneDrive\Masaüstü\traviaskbott-main\src\main\java\com\osman\traviaskbot\dto\ReservationDto.java
+C:\Users\asoyd\OneDrive\Masaüstü\traviaskbott-main\src\main\java\com\osman\traviaskbot\entity\CancelledMail.java
+C:\Users\asoyd\OneDrive\Masaüstü\traviaskbott-main\src\main\java\com\osman\traviaskbot\entity\ChangedMail.java
+C:\Users\asoyd\OneDrive\Masaüstü\traviaskbott-main\src\main\java\com\osman\traviaskbot\entity\Driver.java
+C:\Users\asoyd\OneDrive\Masaüstü\traviaskbott-main\src\main\java\com\osman\traviaskbot\entity\GeocodeCache.java
+C:\Users\asoyd\OneDrive\Masaüstü\traviaskbott-main\src\main\java\com\osman\traviaskbot\entity\Reservation.java
+C:\Users\asoyd\OneDrive\Masaüstü\traviaskbott-main\src\main\java\com\osman\traviaskbot\entity\Route.java
+C:\Users\asoyd\OneDrive\Masaüstü\traviaskbott-main\src\main\java\com\osman\traviaskbot\entity\UnparsedMail.java
+C:\Users\asoyd\OneDrive\Masaüstü\traviaskbott-main\src\main\java\com\osman\traviaskbot\exception\AddressValidationException.java
+C:\Users\asoyd\OneDrive\Masaüstü\traviaskbott-main\src\main\java\com\osman\traviaskbot\exception\GlobalExceptionHandler.java
+C:\Users\asoyd\OneDrive\Masaüstü\traviaskbott-main\src\main\java\com\osman\traviaskbot\repository\CancelledMailRepository.java
+C:\Users\asoyd\OneDrive\Masaüstü\traviaskbott-main\src\main\java\com\osman\traviaskbot\repository\ChangedMailRepository.java
+C:\Users\asoyd\OneDrive\Masaüstü\traviaskbott-main\src\main\java\com\osman\traviaskbot\repository\DriverRepository.java
+C:\Users\asoyd\OneDrive\Masaüstü\traviaskbott-main\src\main\java\com\osman\traviaskbot\repository\GeocodeCacheRepository.java
+C:\Users\asoyd\OneDrive\Masaüstü\traviaskbott-main\src\main\java\com\osman\traviaskbot\repository\ReservationRepository.java
+C:\Users\asoyd\OneDrive\Masaüstü\traviaskbott-main\src\main\java\com\osman\traviaskbot\repository\UnparsedMailRepository.java
+C:\Users\asoyd\OneDrive\Masaüstü\traviaskbott-main\src\main\java\com\osman\traviaskbot\scheduler\ReservationScheduler.java
+C:\Users\asoyd\OneDrive\Masaüstü\traviaskbott-main\src\main\java\com\osman\traviaskbot\service\DriverService.java
+C:\Users\asoyd\OneDrive\Masaüstü\traviaskbott-main\src\main\java\com\osman\traviaskbot\service\GeocodingService.java
+C:\Users\asoyd\OneDrive\Masaüstü\traviaskbott-main\src\main\java\com\osman\traviaskbot\service\LoggerService.java
+C:\Users\asoyd\OneDrive\Masaüstü\traviaskbott-main\src\main\java\com\osman\traviaskbot\service\ReservationOptimizer.java
+C:\Users\asoyd\OneDrive\Masaüstü\traviaskbott-main\src\main\java\com\osman\traviaskbot\service\ReservationProcessor.java
+C:\Users\asoyd\OneDrive\Masaüstü\traviaskbott-main\src\main\java\com\osman\traviaskbot\service\RouteService.java
+C:\Users\asoyd\OneDrive\Masaüstü\traviaskbott-main\src\main\java\com\osman\traviaskbot\service\VrpService.java
+C:\Users\asoyd\OneDrive\Masaüstü\traviaskbott-main\src\main\java\com\osman\traviaskbot\TraviaskBotApplication.java
+C:\Users\asoyd\OneDrive\Masaüstü\traviaskbott-main\src\main\java\com\osman\traviaskbot\util\AddressValidator.java
+C:\Users\asoyd\OneDrive\Masaüstü\traviaskbott-main\src\main\java\com\osman\traviaskbot\util\DistrictExtractor.java

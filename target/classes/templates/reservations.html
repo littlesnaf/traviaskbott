@@ -25,15 +25,19 @@
     </div>
 
     <!-- filtreleme alanı -->
-    <div class="row mb-4">
+    <form method="get" action="/reservations" class="row mb-4">
         <div class="col-md-3">
             <label for="filterDate" class="form-label">Filter by Date:</label>
-            <input id="filterDate" type="date" class="form-control">
+            <input id="filterDate" name="date" type="date" class="form-control" th:value="${date}">
         </div>
         <div class="col-md-2 d-flex align-items-end">
-            <button id="clearFilter" class="btn btn-outline-secondary w-100">Clear Filter</button>
+            <button type="submit" class="btn btn-outline-primary w-100">Filter</button>
         </div>
-    </div>
+        <div class="col-md-2 d-flex align-items-end">
+            <a href="/reservations" class="btn btn-outline-secondary w-100">Clear Filter</a>
+        </div>
+    </form>
+
 
     <!-- tablo -->
     <table class="table table-bordered table-striped align-middle">
@@ -48,6 +52,8 @@
             <th>District</th>
             <th>Date</th>
             <th>Time</th>
+            <th><strong>Adults</strong></th>
+            <th><strong>Children</strong></th>
             <th>Status</th>
             <th>Actions</th>
         </tr>
@@ -66,6 +72,8 @@
             <td th:text="${r.district}"></td>
             <td th:text="${r.date}"></td>
             <td th:text="${r.time}"></td>
+            <td th:text="${r.adults}"></td>
+            <td th:text="${r.children}"></td>
             <td th:text="${r.status}"></td>
             <td class="text-center">
                 <a class="btn btn-sm btn-warning"
@@ -137,6 +145,7 @@
     }
 
     /* Filter by Date */
+
     function filterTableByDate() {
         const filterVal = document.getElementById('filterDate').value;
         const rows = document.querySelectorAll('table tbody tr');
@@ -145,6 +154,17 @@
             r.style.display = (!filterVal || dateCell === filterVal) ? '' : 'none';
         });
     }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        document.getElementById('filterDate')
+            .addEventListener('change', filterTableByDate);
+        document.getElementById('clearFilter')
+            .addEventListener('click', () => {
+                document.getElementById('filterDate').value = '';
+                filterTableByDate();
+            });
+    });
+
 
     document.addEventListener('DOMContentLoaded', () => {
         sortTable();
