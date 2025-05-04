@@ -1,13 +1,13 @@
-// src/main/java/com/osman/traviaskbot/service/ReservationProcessor.java
 package com.osman.traviaskbot.service;
 
+import com.osman.traviaskbot.controller.RouteController;
 import com.osman.traviaskbot.dto.ReservationDto;
 import com.osman.traviaskbot.entity.Reservation;
+import com.osman.traviaskbot.entity.Route;
 import com.osman.traviaskbot.entity.UnparsedMail;
 import com.osman.traviaskbot.repository.ReservationRepository;
 import com.osman.traviaskbot.repository.UnparsedMailRepository;
 import com.osman.traviaskbot.util.DistrictExtractor;
-import com.osman.traviaskbot.controller.RouteController;
 import jakarta.mail.*;
 import jakarta.mail.internet.MimeMultipart;
 import jakarta.mail.search.FlagTerm;
@@ -25,194 +25,130 @@ import java.time.format.DateTimeParseException;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
-import com.osman.traviaskbot.entity.Route;
-
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.PersistenceContext;
-import jakarta.transaction.Transactional;
-
-
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class ReservationProcessor {
 
-    /* ─────────────── sabitler ─────────────── */
-    private static final String HOST = "imap.gmail.com";
-    private static final int MAX_EMAILS = 50; // tek seferde bakılacak maksimum mail
+    private static final String HOST       = "imap.gmail.com";
+    private static final int    MAX_EMAILS = 5000;
 
-    /* ─────────────── bağımlılıklar ─────────────── */
     private final ReservationRepository reservationRepo;
     private final UnparsedMailRepository unparsedRepo;
-    private final DistrictExtractor districtExtractor;
-    private final RouteService routeService;
-    private final VrpService vrpService;
-    private List<Route> vrpResults;
+    private final DistrictExtractor      districtExtractor;
+    private final RouteService           routeService;
+    private final VrpService             vrpService;
 
-    @Value("${gmail.user}")
-    private String gmailUser;
-    @Value("${gmail.password}")
-    private String gmailPass;
+    @Value("${gmail.user}")     private String gmailUser;
+    @Value("${gmail.password}") private String gmailPass;
 
-    /* ════════════════════════════════════════════════════════════════════════════════
-       1) CRON / Scheduler tarafı – Mail’leri çek, çözümle, kaydet
-       ════════════════════════════════════════════════════════════════════════════════ */
     public void processReservations() {
-
         int ok = 0, fail = 0;
-
         for (String body : fetchEmailBodies()) {
             try {
-                Map<String, Object> data = parseEmail(body);
-                if (data != null) {
-                    saveReservation(data);
-                    ok++;
-                } else {
+                Map<String,Object> data = parseEmail(body);
+                if (data == null) {
                     logUnparsed(body);
                     fail++;
+                } else {
+                    saveReservation(data);
+                    ok++;
                 }
-            } catch (Exception ex) { // tek mail patlasa da döngü devam etsin
-                log.error("⛔ Mail parse hatası", ex);
+            } catch (Exception ex) {
+                log.error("⛔ Mail parse exception", ex);
                 fail++;
             }
         }
-        log.info("🔄 Parse bitti → başarılı {}, hatalı {}", ok, fail);
+        log.info("🔄 Mail tarama tamam → ok={} fail={}", ok, fail);
     }
 
-    /* ════════════════════════════════════════════════════════════════════════════════
-       2) Controller’lar için – İstenilen tarihten sonraki rezervasyonları DTO olarak döner
-       ════════════════════════════════════════════════════════════════════════════════ */
     public List<ReservationDto> fetchDtos(LocalDate after) {
+        return fetchDtos(after, null);
+    }
 
-        log.debug("▶️ ReservationProcessor.fetchDtos after={} çağrıldı", after);
+    public List<ReservationDto> fetchDtos(LocalDate after, String tourFilter) {
+        var stream = (tourFilter == null || tourFilter.isBlank())
+                ? reservationRepo.findByDateGreaterThanEqualOrderByDateAscTimeAsc(after).stream()
+                : reservationRepo.findByDateGreaterThanEqualAndTourOrderByDateAscTimeAsc(after, tourFilter).stream();
 
-        return reservationRepo
-                .findByDateGreaterThanEqualOrderByDateAscTimeAsc(after)
-                .stream()
-                /* Boş veya null pickup adreslerini **ELER** */
-                .filter(dto ->
-                        dto.getPickup() != null && !dto.getPickup().isBlank())
+        return stream
+                .filter(r -> r.getPickup() != null && !r.getPickup().isBlank())
                 .map(ReservationDto::of)
-                .collect(Collectors.toList());
+                .toList();
     }
 
     public List<Route> getVrpResults(LocalDate after) {
-
-        /* (a) DTO’ları al */
         List<ReservationDto> dtos = fetchDtos(after);
+        if (dtos.isEmpty()) return Collections.emptyList();
 
-        /* (b) Şoför hub’ları + Kemer kontrolü */
-        List<String> driverAddrs = RouteController.DRIVER_ADDRS;
-        List<double[]> driverStarts = new ArrayList<>();
-        List<Boolean>  isKemerDriver = new ArrayList<>();
-
-        for (String addr : driverAddrs) {
+        List<double[]> hubs       = new ArrayList<>();
+        List<Boolean>  kemerFlags = new ArrayList<>();
+        for (String addr : RouteController.DRIVER_ADDRS) {
             try {
-                driverStarts.add(routeService.toLatLng(addr));
-                isKemerDriver.add(addr.toLowerCase().contains("kemer"));
+                hubs.add(routeService.toLatLng(addr));
+                kemerFlags.add(addr.toLowerCase().contains("kemer"));
             } catch (Exception e) {
-                log.error("Driver geocode failed: {}", addr, e);
+                log.error("Hub geocode error: {}", addr, e);
             }
         }
 
-        /* (c) Pickup’ları hazırla */
-        List<double[]> pickups   = new ArrayList<>();
-        List<Integer>  paxList   = new ArrayList<>();
-        List<Integer>  regions   = new ArrayList<>();
-
+        List<double[]> pickups = new ArrayList<>();
+        List<Integer>  pax     = new ArrayList<>();
+        List<Integer>  regions = new ArrayList<>();
         for (ReservationDto d : dtos) {
             try {
                 pickups.add(routeService.toLatLng(d.getPickup()));
-                paxList.add(d.getAdults() + d.getChildren());
-
-                String dist = d.getDistrict();
-                if (List.of("Kemer","Beldibi","Çamyuva","Göynük").contains(dist))
-                    regions.add(RouteController.Region.KEMER.ordinal());
-                else if (List.of("Side","Sorgun","Evrenseki","Çolaklı",
-                        "Kızılot","Kızılğaç","Manavgat").contains(dist))
-                    regions.add(RouteController.Region.SIDE.ordinal());
-                else  regions.add(RouteController.Region.OTHER.ordinal());
-
+                pax.add(d.getAdults() + d.getChildren());
+                regions.add(regionCode(d.getDistrict()));
             } catch (Exception ex) {
-                log.warn("Pickup geocode atlandı: {}", d.getPickup());
+                log.warn("⛔ Pickup geocode atlandı: {}", d.getPickup());
             }
         }
         if (pickups.isEmpty()) return Collections.emptyList();
 
-        /* (d) Solve */
-        Map<Integer, List<Integer>> sol = vrpService.solveVrp(
-                driverStarts, pickups, paxList, regions, isKemerDriver, driverStarts.size()
+        Map<Integer,List<Integer>> sol = vrpService.solveVrp(
+                hubs, pickups, pax, regions, kemerFlags, hubs.size()
         );
 
-        /* (e) Rota DTO’su döndür */
         List<Route> routes = new ArrayList<>();
         sol.forEach((veh, nodes) ->
-                routes.add(new Route("driver" + (veh + 1), nodes.size() - 1)) // -1 = depo hariç
+                routes.add(new Route("driver" + (veh + 1), nodes.size() - 1))
         );
         return routes;
     }
 
-
-
-
-
-    /* ════════════════════════════════════════════════════════════════════════════════
-       --------------  A Ş A Ğ I S I   P R İ V A T E   Y A R D I M C I L A R  --------------
-       ──────────────────────────────────────────────────────────────────────────────── */
-
-    /** IMAP’ten gövdeleri çeker (yalnızca okunmamış & doğru gönderen) */
     private List<String> fetchEmailBodies() {
-
         List<String> bodies = new ArrayList<>();
-
-        try {
-            Session session = Session.getDefaultInstance(new Properties());
-            Store store = session.getStore("imaps");
+        try (Store store = Session.getDefaultInstance(new Properties()).getStore("imaps")) {
             store.connect(HOST, gmailUser, gmailPass);
-
             Folder inbox = store.getFolder("INBOX");
             inbox.open(Folder.READ_ONLY);
 
-            /* sadece “UNSEEN” mail’lere bak */
-            Message[] msgs = inbox.search(
-                    new FlagTerm(new Flags(Flags.Flag.SEEN), false)
-            );
-
-            /* son MAX_EMAILS adedi */
+            Message[] msgs = inbox.search(new FlagTerm(new Flags(Flags.Flag.SEEN), false));
             for (int i = Math.max(0, msgs.length - MAX_EMAILS); i < msgs.length; i++) {
-
                 if (!isValidSender(msgs[i])) continue;
-
                 String body = extractBody(msgs[i]);
-                if (body != null && !body.isBlank())
+                if (body != null && !body.isBlank()) {
                     bodies.add(body);
+                }
             }
             inbox.close(false);
-            store.close();
-
         } catch (Exception ex) {
-            log.error("✉️ Mail okuma hatası", ex);
+            log.error("✉️ IMAP okuma hatası", ex);
         }
         return bodies;
     }
 
-    /** Gönderen doğru mu? ( getyourguide notification ) */
     private boolean isValidSender(Message m) throws MessagingException {
-
         Address[] from = m.getFrom();
-        return from != null &&
-                from[0].toString().toLowerCase(Locale.ROOT)
-                        .contains("@notification.getyourguide.com");
+        return from != null && from[0].toString().toLowerCase(Locale.ROOT)
+                .contains("@notification.getyourguide.com");
     }
 
-    /** Recursively extract plain-text body */
     private String extractBody(Part p) throws Exception {
-
         if (p.isMimeType("text/plain")) return p.getContent().toString();
-        if (p.isMimeType("text/html")) return Jsoup.parse(p.getContent().toString()).text();
-
+        if (p.isMimeType("text/html"))  return Jsoup.parse(p.getContent().toString()).text();
         if (p.isMimeType("multipart/*")) {
             MimeMultipart mp = (MimeMultipart) p.getContent();
             for (int i = 0; i < mp.getCount(); i++) {
@@ -223,132 +159,119 @@ public class ReservationProcessor {
         return null;
     }
 
-    /** Mail içeriğini Regex’lerle parçala – başarılıysa Map döner */
-    private Map<String, Object> parseEmail(String raw) {
+    private Map<String,Object> parseEmail(String rawHtml) {
+        String text = Jsoup.parse(rawHtml).text();
+        Map<String,Object> r = new HashMap<>();
 
-        String text = Jsoup.parse(raw).text(); // tüm HTML etiketlerini temizle
-        Map<String, Object> r = new HashMap<>();
-
-        /* ------------ Referans ------------ */
-        String ref = match(text,
-                "Reference number:\\s*(GYG\\w+)",
-                "Referans numarası:\\s*(GYG\\w+)"
-        );
+        String ref = match(text,"Reference number:\\s*(GYG\\w+)");
         if (ref == null) return null;
         r.put("reference", ref);
 
-        /* ------------ Tarih & Saat ------------ */
         String[] dt = matchGroups(text,
                 "Date:\\s*([A-Za-z]+ \\d{1,2}, \\d{4})\\s+(\\d{1,2}:\\d{2}\\s*[AP]M)",
                 "Tarih:\\s*(\\d{1,2} [A-Za-zçğıöşüÇĞİÖŞÜ]+ \\d{4})\\s+(\\d{1,2}:\\d{2})"
         );
         if (dt == null) return null;
 
-        DateTimeFormatter enDateFmt = DateTimeFormatter.ofPattern("MMMM d, yyyy", Locale.ENGLISH);
-        DateTimeFormatter trDateFmt = DateTimeFormatter.ofPattern("d MMMM yyyy", new Locale("tr"));
-
         LocalDate date;
         try {
-            date = LocalDate.parse(dt[0], enDateFmt);
-        } catch (DateTimeParseException e) { // Türkçe tarih
-            date = LocalDate.parse(dt[0], trDateFmt);
+            date = LocalDate.parse(dt[0],
+                    DateTimeFormatter.ofPattern("MMMM d, yyyy", Locale.ENGLISH));
+        } catch (DateTimeParseException e) {
+            date = LocalDate.parse(dt[0],
+                    DateTimeFormatter.ofPattern("d MMMM yyyy", new Locale("tr")));
         }
-
-        DateTimeFormatter timeFmt = DateTimeFormatter.ofPattern("h:mm a", Locale.ENGLISH);
-        LocalTime time = LocalTime.parse(dt[1].toUpperCase(Locale.ROOT), timeFmt);
-
+        DateTimeFormatter tf = DateTimeFormatter.ofPattern("h:mm a", Locale.ENGLISH);
+        LocalTime time = LocalTime.parse(dt[1].toUpperCase(Locale.ROOT), tf);
         r.put("date", date);
         r.put("time", time);
 
-        /* ------------ Diğer alanlar ------------ */
-        r.put("adults", extractNum(text, "(\\d+)\\s*x\\s*(Adult|Yetişkin)"));
-        r.put("children", extractNum(text, "(\\d+)\\s*x\\s*(Child|Çocuk)"));
-        r.put("phone", nvl(match(text, "Phone:\\s*([+\\d\\s]+)")));
+        // —— Sadece Suluada veya Land of Legends tespit et
+        String tourLine = nvl(match(text,"offer has been booked:\\s*([^\\r\\n]+)"));
+        String lower = tourLine.toLowerCase(Locale.ROOT);
+        String tour;
+        if (lower.contains("suluada")) {
+            tour = "Suluada";
+        } else if (lower.contains("legends")) {
+            tour = "Land of Legends";
+        } else {
+            tour = "";
+        }
+        r.put("tour", tour);
 
+        // opsiyon ismine artık gerek yoksa boş bırakabilirsiniz
+        r.put("option", "");
+
+        r.put("adults",   extractNum(text,"(\\d+)\\s*x\\s*(Adult|Yetişkin)"));
+        r.put("children", extractNum(text,"(\\d+)\\s*x\\s*(Child|Çocuk)"));
+
+        r.put("phone",    nvl(match(text,"Phone:\\s*([+\\d\\s]+)")));
         String pickup = nvl(match(text,
-                "Pickup location:\\s*([^\\r\\n]+?)(?:\\s*Open in Google Maps|\\n)",
-                "Pickup location:\\s*([^\\r\\n]+)"
-        ));
-        r.put("pickup", pickup);
-
+                "Pickup location:\\s*([^\\r\\n]+?)(?:\\s*Open in Google Maps|\\n)"));
+        r.put("pickup",   pickup);
         r.put("customer", nvl(match(text,
-                "Main customer:\\s*([^\r\n]+?)\\s*(?:Phone:|Language:|$)"
-        )));
+                "Main customer:\\s*([^\r\n]+?)\\s*(?:Phone:|Language:|$)")));
+        r.put("status",   "confirmed");
+        r.put("district", districtExtractor.extract(pickup));
 
-        r.put("status", "confirmed");
-
-        /* ------------ İlçe tahmini ------------ */
-        String district = districtExtractor.extract(pickup);
-        r.put("district", district);
-
-        log.debug("Parse OK: reference={} date={} time={} district={}", ref, date, time, district);
         return r;
     }
 
-    /** DB’ye kaydet */
-    private void saveReservation(Map<String, Object> d) {
+    private void saveReservation(Map<String,Object> d) {
         String ref = (String) d.get("reference");
         if (reservationRepo.existsByReference(ref)) {
-            log.warn("❗ Aynı referans zaten var, atlanıyor: {}", ref);
+            log.warn("❗ Çift rezervasyon atlandı: {}", ref);
             return;
         }
-
-        Reservation res = new Reservation();
-        res.setReference((String) d.get("reference"));
-        res.setStatus((String) d.get("status"));
-        res.setDate((LocalDate) d.get("date"));
-        res.setTime((LocalTime) d.get("time"));
-        res.setAdults((Integer) d.get("adults"));
-        res.setChildren((Integer) d.get("children"));
-        res.setCustomer((String) d.get("customer"));
-        res.setPhone((String) d.get("phone"));
-        res.setPickup((String) d.get("pickup"));
-        res.setDistrict((String) d.get("district"));
-
-        reservationRepo.save(res);
+        Reservation r = new Reservation();
+        r.setReference(ref);
+        r.setStatus((String) d.get("status"));
+        r.setTour((String) d.get("tour"));
+        r.setOptionName("");
+        r.setDate((LocalDate) d.get("date"));
+        r.setTime((LocalTime) d.get("time"));
+        r.setAdults((Integer) d.get("adults"));
+        r.setChildren((Integer) d.get("children"));
+        r.setCustomer((String) d.get("customer"));
+        r.setPhone((String) d.get("phone"));
+        r.setPickup((String) d.get("pickup"));
+        r.setDistrict((String) d.get("district"));
+        reservationRepo.save(r);
     }
 
-    /** Parse edilemeyen mail gövdesini sakla */
     private void logUnparsed(String body) {
         unparsedRepo.save(new UnparsedMail(null, body, Instant.now()));
     }
 
-    /* ─────────────── küçük yardımcı regex metodları ─────────────── */
-
     private String match(String txt, String... patterns) {
-
         for (String p : patterns) {
-            Matcher m = Pattern.compile(p,
-                    Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE
-            ).matcher(txt);
+            Matcher m = Pattern.compile(p, Pattern.CASE_INSENSITIVE|Pattern.UNICODE_CASE).matcher(txt);
             if (m.find()) return m.group(1).trim();
         }
         return null;
     }
 
     private String[] matchGroups(String txt, String... patterns) {
-
         for (String p : patterns) {
-            Matcher m = Pattern.compile(p,
-                    Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE
-            ).matcher(txt);
-            if (m.find())
-                return new String[]{m.group(1).trim(), m.group(2).trim()};
+            Matcher m = Pattern.compile(p, Pattern.CASE_INSENSITIVE|Pattern.UNICODE_CASE).matcher(txt);
+            if (m.find()) return new String[]{m.group(1).trim(), m.group(2).trim()};
         }
         return null;
     }
 
     private int extractNum(String txt, String pattern) {
-
         Matcher m = Pattern.compile(pattern, Pattern.CASE_INSENSITIVE).matcher(txt);
         return m.find() ? Integer.parseInt(m.group(1)) : 0;
     }
 
-    private String nvl(String s) { // null-safe trim
-        return (s == null) ? "" : s.trim();
+    private String nvl(String s) { return s == null ? "" : s.trim(); }
+
+    private int regionCode(String dist) {
+        if (List.of("Kemer","Beldibi","Çamyuva","Göynük").contains(dist))
+            return RouteController.Region.KEMER.ordinal();
+        if (List.of("Side","Sorgun","Evrenseki","Çolaklı","Kızılot","Kızılğaç","Manavgat")
+                .contains(dist))
+            return RouteController.Region.SIDE.ordinal();
+        return RouteController.Region.OTHER.ordinal();
     }
-
-
-
-
 }

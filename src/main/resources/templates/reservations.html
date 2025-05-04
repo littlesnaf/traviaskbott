@@ -1,34 +1,41 @@
 <!DOCTYPE html>
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
 <head>
-    <meta charset="UTF-8">
+    <meta charset="UTF‑8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Reservations</title>
-    <!-- Bootstrap CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <!-- Bootstrap 5 -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css"
+          rel="stylesheet">
 </head>
 <body>
-
 <div class="container mt-5">
+
     <h1 class="mb-4 text-center">Reservations</h1>
 
+    <!-- üst aksiyon butonları -->
     <div class="d-flex justify-content-end mb-3 gap-2">
-        <form action="/optimize" method="post">
+        <form action="/optimize" method="post" class="m-0">
             <button type="submit" class="btn btn-primary">Optimize Routes</button>
         </form>
 
-        <button onclick="addReservation()" class="btn btn-success">+ Add Reservation</button>
-        <button onclick="deleteSelectedReservations()" class="btn btn-danger">🗑️ Delete Selected</button>
+        <button class="btn btn-success" onclick="showAddModal()">+ Add Reservation</button>
+        <button class="btn btn-danger"  onclick="deleteSelected()">🗑️ Delete Selected</button>
+        <button class="btn btn-secondary" onclick="exportTableToCSV('reservations.csv')">⬇️ Export CSV</button>
     </div>
 
-
-    <table class="table table-bordered table-striped">
-        <thead class="table-dark">
+    <!-- tablo -->
+    <table class="table table-bordered table-striped align-middle">
+        <thead class="table-dark text-center">
         <tr>
-            <th><input type="checkbox" id="selectAll" onchange="toggleSelectAll(this)"></th> <!-- yeni -->
+            <th><input id="selectAll" type="checkbox" onchange="toggleSelectAll(this)"></th>
             <th>ID</th>
             <th>Customer</th>
-            <th>Pickup Location</th>
+            <th>Tour</th>
+            <!-- Burayı Option → Phone olarak güncelledik -->
+            <th>Phone</th>
+            <th>Pickup</th>
             <th>District</th>
             <th>Date</th>
             <th>Time</th>
@@ -38,160 +45,152 @@
         </thead>
 
         <tbody>
-        <tr th:each="res : ${reservations}">
-            <td><input type="checkbox" class="reservation-checkbox" th:value="${res.id}"></td> <!-- yeni -->
-            <td th:text="${res.id}"></td>
-            <td th:text="${res.customer}"></td>
-            <td th:text="${res.pickup}"></td>
-            <td th:text="${res.district}"></td>
-            <td th:text="${res.date}"></td>
-            <td th:text="${res.time}"></td>
-            <td th:text="${res.status}"></td>
-            <td>
-                <a th:href="@{'/reservations/edit/' + ${res.id}}" class="btn btn-sm btn-warning">Düzenle</a>
+        <tr th:each="r : ${reservations}">
+            <td class="text-center">
+                <input class="reservation-checkbox form-check-input" th:value="${r.id}" type="checkbox">
+            </td>
+            <td th:text="${r.id}"></td>
+            <td th:text="${r.customer}"></td>
+            <td th:text="${r.tour}"></td>
+            <!-- Burayı r.optionName → r.phone olarak değiştirdik -->
+            <td th:text="${r.phone}"></td>
+            <td th:text="${r.pickup}"></td>
+            <td th:text="${r.district}"></td>
+            <td th:text="${r.date}"></td>
+            <td th:text="${r.time}"></td>
+            <td th:text="${r.status}"></td>
+            <td class="text-center">
+                <a class="btn btn-sm btn-warning"
+                   th:href="@{'/reservations/edit/' + ${r.id}}">Edit</a>
             </td>
         </tr>
         </tbody>
     </table>
 </div>
 
-<!-- Bootstrap JS (optional but good for responsiveness) -->
+<!--  Bootstrap bundle -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-    function addReservation() {
-        var myModal = new bootstrap.Modal(document.getElementById('addReservationModal'));
-        myModal.show();
+    /* Select / bulk delete */
+    function toggleSelectAll(master) {
+        document.querySelectorAll('.reservation-checkbox')
+            .forEach(cb => cb.checked = master.checked);
+    }
+    function deleteSelected() {
+        const ids = [...document.querySelectorAll('.reservation-checkbox:checked')]
+            .map(cb => cb.value);
+        if (!ids.length) { alert('Select at least one!'); return; }
+        if (!confirm('Delete selected reservations?')) return;
+        Promise.all(ids.map(id =>
+            fetch(`/api/reservations/${id}`, {method: 'DELETE'})
+                .then(r => r.ok || Promise.reject(id))
+        )).then(() => location.reload())
+            .catch(badId => alert(`Failed to delete id=${badId}`));
     }
 
-    // Şu anda form submit işlemini yakalayacağız (ileride backend'e POST atacağız)
-    document.addEventListener('DOMContentLoaded', function() {
-        document.getElementById('addReservationForm').addEventListener('submit', function(e) {
-            e.preventDefault();
-
-            const formData = new FormData(this);
-            const data = {};
-
-            formData.forEach((value, key) => {
-                data[key] = value;
-            });
-
-            // API'ye POST isteği at
-            fetch('/api/reservations', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(data)
-            })
-                .then(response => {
-                    if (!response.ok) {
-                        throw new Error('Failed to save reservation');
-                    }
-                    return response.json();
-                })
-                .then(result => {
-                    alert('✅ Reservation saved successfully!');
-                    // Modal'ı kapat
-                    var myModal = bootstrap.Modal.getInstance(document.getElementById('addReservationModal'));
-                    myModal.hide();
-                    // Sayfayı yenileyelim ki yeni rezervasyon eklensin
-                    window.location.reload();
-                })
-                .catch(error => {
-                    alert('❌ Error saving reservation: ' + error.message);
-                });
-        });
+    /* Add modal */
+    const addModalEl = document.getElementById('addReservationModal');
+    const addModal   = new bootstrap.Modal(addModalEl);
+    function showAddModal() { addModal.show(); }
+    addModalEl.querySelector('form').addEventListener('submit', e => {
+        e.preventDefault();
+        const data = Object.fromEntries(new FormData(e.target).entries());
+        fetch('/api/reservations', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        }).then(r => r.ok ? r.json() : Promise.reject())
+            .then(() => { addModal.hide(); location.reload(); })
+            .catch(() => alert('❌ Error while saving!'));
     });
 
-</script>
+    /* Frontend sıralama (Tour→District→Date→Time) */
+    document.addEventListener('DOMContentLoaded', () => {
+        const tbody = document.querySelector('table tbody');
+        const rows  = Array.from(tbody.querySelectorAll('tr'));
+        rows.sort((a, b) => {
+            const tourA = a.children[3].textContent.trim().toLowerCase();
+            const tourB = b.children[3].textContent.trim().toLowerCase();
+            if (tourA !== tourB) return tourA.localeCompare(tourB);
 
-<script>
-    function toggleSelectAll(selectAllCheckbox) {
-        const checkboxes = document.querySelectorAll('.reservation-checkbox');
-        checkboxes.forEach(cb => cb.checked = selectAllCheckbox.checked);
-    }
+            const distA = a.children[6].textContent.trim().toLowerCase();
+            const distB = b.children[6].textContent.trim().toLowerCase();
+            if (distA !== distB) return distA.localeCompare(distB);
 
-    function deleteSelectedReservations() {
-        const selectedCheckboxes = document.querySelectorAll('.reservation-checkbox:checked');
-        if (selectedCheckboxes.length === 0) {
-            alert("Lütfen silmek için en az bir rezervasyon seçin!");
-            return;
-        }
+            const dateA = new Date(a.children[7].textContent);
+            const dateB = new Date(b.children[7].textContent);
+            if (dateA - dateB) return dateA - dateB;
 
-        if (!confirm("Seçilen rezervasyonları silmek istediğinize emin misiniz?")) {
-            return;
-        }
-
-        let promises = [];
-        selectedCheckboxes.forEach(checkbox => {
-            const id = checkbox.value;
-            const promise = fetch(`/api/reservations/${id}`, {
-                method: 'DELETE'
-            })
-                .then(response => {
-                    if (response.ok) {
-                        checkbox.closest('tr').remove();
-                    } else {
-                        alert(`Rezervasyon ID ${id} silinemedi!`);
-                    }
-                })
-                .catch(error => {
-                    console.error('Hata:', error);
-                });
-            promises.push(promise);
+            const timeA = a.children[8].textContent.trim();
+            const timeB = b.children[8].textContent.trim();
+            return timeA.localeCompare(timeB);
         });
+        rows.forEach(r => tbody.appendChild(r));
+    });
 
-        Promise.all(promises).then(() => {
-            setTimeout(() => {
-                window.location.reload();
-            }, 500); // Küçük bir bekleme ile sayfa tazeliyoruz
-        });
+    /* CSV export */
+    function exportTableToCSV(filename) {
+        const rows = Array.from(document.querySelectorAll('table tr'));
+        const csv = rows.map(row => {
+            const cols = Array.from(row.querySelectorAll('th, td'))
+                .filter((_,i) => i!==0) // checkbox hücresini atla
+                .map(cell => `"${cell.textContent.trim().replace(/"/g,'""')}"`);
+            return cols.join(',');
+        }).join('\r\n');
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = filename;
+        link.click();
     }
-
 </script>
-
-
-
 
 <!-- Add Reservation Modal -->
-<div class="modal fade" id="addReservationModal" tabindex="-1" aria-labelledby="addReservationModalLabel" aria-hidden="true">
+<div id="addReservationModal" class="modal fade" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
-            <form id="addReservationForm">
+            <form>
                 <div class="modal-header">
-                    <h5 class="modal-title" id="addReservationModalLabel">Add New Reservation</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    <h5 class="modal-title">New Reservation</h5>
+                    <button class="btn-close" data-bs-dismiss="modal" type="button"></button>
                 </div>
-                <div class="modal-body">
-                    <div class="mb-3">
+                <div class="modal-body row g-2">
+                    <div class="col-12">
                         <label class="form-label">Customer</label>
-                        <input type="text" class="form-control" name="customer" required>
+                        <input name="customer" class="form-control" required>
                     </div>
-                    <div class="mb-3">
+                    <div class="col-12">
+                        <label class="form-label">Tour</label>
+                        <input name="tour" class="form-control" required>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">Phone</label>
+                        <input name="phone" class="form-control">
+                    </div>
+                    <div class="col-12">
                         <label class="form-label">Pickup Location</label>
-                        <input type="text" class="form-control" name="pickup" required>
+                        <input name="pickup" class="form-control" required>
                     </div>
-                    <div class="mb-3">
+                    <div class="col-md-6">
                         <label class="form-label">District</label>
-                        <input type="text" class="form-control" name="district" required>
+                        <input name="district" class="form-control" required>
                     </div>
-                    <div class="mb-3">
+                    <div class="col-md-3">
                         <label class="form-label">Date</label>
-                        <input type="date" class="form-control" name="date" required>
+                        <input name="date" type="date" class="form-control" required>
                     </div>
-                    <div class="mb-3">
+                    <div class="col-md-3">
                         <label class="form-label">Time</label>
-                        <input type="time" class="form-control" name="time" required>
+                        <input name="time" type="time" class="form-control" required>
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="submit" class="btn btn-success">Save</button>
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button class="btn btn-success" type="submit">Save</button>
+                    <button class="btn btn-secondary" data-bs-dismiss="modal" type="button">Cancel</button>
                 </div>
             </form>
         </div>
     </div>
 </div>
-
 </body>
 </html>

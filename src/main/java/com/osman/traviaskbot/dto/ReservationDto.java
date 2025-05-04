@@ -1,4 +1,3 @@
-// src/main/java/com/osman/traviaskbot/dto/ReservationDto.java
 package com.osman.traviaskbot.dto;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
@@ -11,13 +10,16 @@ import java.time.LocalTime;
 
 @Data
 @JsonPropertyOrder({
-        "district","status","reference","date","time",
-        "adults","children","customer","phone","pickup"
+        "district","status","reference","tour","optionName",
+        "date","time","adults","children","customer","phone","pickup"
 })
 public class ReservationDto {
+
     private String district;
     private String status;
     private String reference;
+    private String tour;        // 💡 Yeni
+    private String optionName;  // 💡 Yeni
 
     @JsonFormat(pattern = "yyyy-MM-dd")
     private LocalDate date;
@@ -36,6 +38,8 @@ public class ReservationDto {
         d.setDistrict(r.getDistrict());
         d.setStatus(r.getStatus());
         d.setReference(r.getReference());
+        d.setTour(r.getTour());
+        d.setOptionName(r.getOptionName());
         d.setDate(r.getDate());
         d.setTime(r.getTime());
         d.setAdults(r.getAdults());

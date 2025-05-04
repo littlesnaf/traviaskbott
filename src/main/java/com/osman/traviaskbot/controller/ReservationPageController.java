@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 
+import java.util.Comparator;
 import java.util.List;
 
 import org.slf4j.Logger;
@@ -28,9 +29,19 @@ public class ReservationPageController {
     @GetMapping("/reservations")
     public String showReservations(Model model) {
         List<Reservation> reservations = reservationRepository.findAll();
+
+        // --- Backend-side sıralama: Tour → District → Date → Time ---
+        reservations.sort(
+                Comparator.comparing(Reservation::getTour, String.CASE_INSENSITIVE_ORDER)
+                        .thenComparing(Reservation::getDate)
+                        .thenComparing(Reservation::getDistrict, String.CASE_INSENSITIVE_ORDER)
+                        .thenComparing(Reservation::getTime)
+        );
+
         model.addAttribute("reservations", reservations);
         return "reservations";
     }
+
 
     @GetMapping("/reservations/edit/{id}")
     public String editReservation(@PathVariable Long id, Model model) {
@@ -53,6 +64,7 @@ public class ReservationPageController {
         logger.info("✅ Optimize tetiklendi!");
         return "redirect:/reservations";
     }
+
 
 
 

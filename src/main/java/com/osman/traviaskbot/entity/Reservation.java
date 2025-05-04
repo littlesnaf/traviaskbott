@@ -1,9 +1,7 @@
-// src/main/java/com/osman/traviaskbot/entity/Reservation.java
 package com.osman.traviaskbot.entity;
 
 import jakarta.persistence.*;
 import lombok.Data;
-
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -12,13 +10,19 @@ import java.time.LocalTime;
 @Table(name = "reservations")
 @Data
 public class Reservation {
+
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     private String reference;
     private String status;
 
-    // artık gerçek DATE/TIME tipi
+    @Column(length = 3000)
+    private String tour;          // 💡 Yeni
+
+    @Column(name = "option_name", length = 3000)
+    private String optionName;    // 💡 Yeni
+
     private LocalDate date;
     private LocalTime time;
 
