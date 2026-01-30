@@ -1,22 +1,40 @@
-# Traviask Bot
+# Traviask
 
-Spring Boot service that ingests booking emails, stores reservations, and
-generates optimized pickup routes for drivers.
+Logistics assistant for tourism companies that automatically collects booking
+emails from GetYourGuide, creates reservations, and computes optimal driver
+routes for daily transportation.
 
-## Features
-- Gmail IMAP ingestion for GetYourGuide booking notifications.
-- Auto-parsing of reservation details (dates, tour, pax, pickup, district).
-- PostgreSQL persistence with JPA.
-- VRP-based route optimization via Google OR-Tools.
-- Google Maps geocoding/directions utilities.
-- REST APIs for reservations, drivers, and route optimization.
-- Thymeleaf pages for viewing and editing reservations.
+## Why it matters
+Tour operators often build pickup routes manually from scattered booking emails.
+Traviask removes that manual work by turning emails into structured reservations
+and splitting passengers across vehicles with optimized routes.
+
+## What it does
+- Auto-ingests new GetYourGuide booking emails on a schedule.
+- Parses customer, pickup, date/time, pax, and tour details.
+- Stores reservations in PostgreSQL.
+- Solves a vehicle routing problem (VRP) to assign customers to drivers.
+- Produces optimized pickup sequences and Google Maps links.
+
+## Highlights (portfolio)
+- End-to-end automation: email → reservation → optimized route.
+- Real-world constraints: vehicle capacity, hub locations, region rules.
+- Google Maps geocoding + OR-Tools optimization integration.
+- REST APIs plus a simple Thymeleaf admin page.
+
+## Architecture (high level)
+1) Gmail IMAP fetch reads unread booking emails.
+2) Parser extracts reservation data.
+3) Data is persisted with Spring Data JPA.
+4) VRP solver assigns stops to drivers and orders pickups.
+5) Routes and maps URLs are exposed via REST endpoints.
 
 ## Tech stack
 - Java 17, Spring Boot 3.4.x, Maven
 - PostgreSQL + Spring Data JPA
 - Google Maps API (Geocoding/Directions)
 - Google OR-Tools (VRP)
+- Docker
 
 ## Requirements
 - Java 17+
@@ -26,9 +44,9 @@ generates optimized pickup routes for drivers.
 - Google Maps API key
 
 ## Configuration
-Application settings live in `src/main/resources/application.properties`.
-Environment variables are expected for secrets:
+Application settings: `src/main/resources/application.properties`.
 
+Secrets (env vars):
 - `GMAIL_USER`
 - `GMAIL_PASSWORD`
 - `GOOGLE_MAPS_API_KEY`
@@ -70,6 +88,15 @@ Drivers:
 - `GET /api/drivers`
 - `POST /api/drivers`
 - `DELETE /api/drivers/{id}`
+
+## Deployment
+- Dockerized for deployment.
+- Previously hosted on AWS (currently removed).
+
+## Screenshots
+Add images here:
+- `docs/images/` (UI)
+- `docs/images/` (route maps)
 
 ## Notes
 - A scheduler runs every 30 minutes to ingest unread booking emails.
