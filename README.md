@@ -16,13 +16,13 @@ and splitting passengers across vehicles with optimized routes.
 - Solves a vehicle routing problem (VRP) to assign customers to drivers.
 - Produces optimized pickup sequences and Google Maps links.
 
-## Highlights (portfolio)
+## Highlights 
 - End-to-end automation: email → reservation → optimized route.
 - Real-world constraints: vehicle capacity, hub locations, region rules.
 - Google Maps geocoding + OR-Tools optimization integration.
 - REST APIs plus a simple Thymeleaf admin page.
 
-## Architecture (high level)
+## Architecture 
 1) Gmail IMAP fetch reads unread booking emails.
 2) Parser extracts reservation data.
 3) Data is persisted with Spring Data JPA.
